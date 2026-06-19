@@ -29,7 +29,6 @@ async function getLegMembers(userId, leg) {
 
   if (result.recordset.length === 0) return [];
 
-  // ⭐ EXACT ASP.NET LOGIC
   let firstMember = result.recordset[0];
 
   members.push(firstMember);
@@ -90,11 +89,13 @@ router.get("/direct/:userId", async (req, res) => {
 
     const userId = req.params.userId;
 
-    console.log("USER:", userId);
+    if (!userId) {
+      return res.status(400).json({ message: "userId required" });
+    }
 
     const result = await pool
       .request()
-      .input("sponserID", sql.NVarChar, userId.trim()) // ✅ FIXED PARAM NAME
+      .input("sponserID", sql.NVarChar, userId.trim())
       .execute("Get_DirectTeamList");
 
     const data = result.recordset.map((m) => ({

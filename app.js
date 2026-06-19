@@ -16,6 +16,9 @@ import adminRoutes from "./routes/admin.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import swaggerSpec from "./swagger.js";
 import swaggerUI from "swagger-ui-express";
+import rateLimit from "express-rate-limit";
+
+// https://api.mymazix.com/
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -23,7 +26,7 @@ const PORT = process.env.PORT ?? 3000;
 // CORS for React frontend
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://mymazix.com/"],
     credentials: true, // allow cookies if you keep session
   }),
 );
@@ -31,6 +34,13 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+
+app.use(limiter);
 
 // API Docs
 app.use("/api-docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));

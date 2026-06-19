@@ -855,3 +855,38 @@ export const getMemberReward = async (req, res) => {
     });
   }
 };
+
+export const getInvoiceAtJoining = async (req, res) => {
+  try {
+    const memberId = req.params?.id;
+
+    const pool = await poolPromise;
+
+    const result = await pool.request().input("MemberID", sql.VarChar, memberId)
+      .query(`
+        SELECT
+            d.MemberID,
+            d.MemberName,
+            SUM(ISNULL(c.BV,0) * ISNULL(c.Qty,0)) AS TotalBV,
+            SUM(ISNULL(c.MemberMRP,0) * ISNULL(c.Qty,0)) AS MMRP,
+            MAX(c.MPDate) AS MPDate
+        FROM MemberProductActivationParticular c
+        INNER JOIN MemberPersonalInfo d
+            ON c.MID = d.MID
+        WHERE d.MemberID = @MemberID
+        GROUP BY d.MemberID, d.MemberName
+      `);
+
+    return res.status(200).json({
+      status: true,
+      data: result.recordset,
+    });
+  } catch (error) {
+    console.log(err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch member dashboard",
+      error: err.message,
+    });
+  }
+};
