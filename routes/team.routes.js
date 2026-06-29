@@ -10,76 +10,249 @@ const router = express.Router();
 
 router.route("/updown").get(getMemberData);
 
-async function getLegMembers(userId, leg) {
+async function getLegMembers(userId, leg, queue, limit = 10, search = "") {
   const pool = await poolPromise;
 
   let members = [];
 
-  // STEP 1 : FIRST PLACEMENT ONLY
-  let result = await pool
-    .request()
-    .input("userId", sql.NVarChar, userId.trim())
-    .input("leg", sql.NVarChar, leg.trim()).query(`
-      SELECT MemberID,MemberName,PlacementID,
-             SponserID,DOJ,Leaf,BV
-      FROM Member_View
-      WHERE PlacementID=@userId
-      AND Leaf=@leg
-    `);
-
-  if (result.recordset.length === 0) return [];
-
-  let firstMember = result.recordset[0];
-
-  members.push(firstMember);
-
-  let queue = [firstMember.MemberID];
-
-  // STEP 2 : LOOP
-  while (queue.length > 0) {
-    let downline = await pool.request().query(`
+  // FIRST REQUEST
+  if (queue.length === 0) {
+    const first = await pool
+      .request()
+      .input("userId", sql.NVarChar, userId)
+      .input("leg", sql.NVarChar, leg).query(`
         SELECT MemberID,MemberName,PlacementID,
                SponserID,DOJ,Leaf,BV
         FROM Member_View
-        WHERE PlacementID IN (${queue.map((id) => `'${id}'`).join(",")})
+        WHERE PlacementID=@userId
+        AND Leaf=@leg
       `);
 
-    if (downline.recordset.length === 0) break;
+    if (!first.recordset.length) {
+      return {
+        members: [],
+        nextCursor: null,
+      };
+    }
 
-    queue = downline.recordset.map((x) => x.MemberID);
+    const firstMember = first.recordset[0];
 
-    members.push(...downline.recordset);
+    members.push(firstMember);
+
+    queue.push(firstMember.MemberID);
   }
 
-  return members.map((m) => ({
-    id: m.MemberID,
-    name: m.MemberName,
-    placementId: m.PlacementID,
-    joinDate: m.DOJ,
-    leg: m.Leaf,
-    bv: Number(m.BV || 0),
-    active: Number(m.BV || 0) > 0,
-    rank: "Distributor",
-  }));
+  while (queue.length && members.length < limit) {
+    const currentBatch = [...queue];
+    queue = [];
+
+    const request = pool.request();
+
+    currentBatch.forEach((id, index) => {
+      request.input(`id${index}`, sql.NVarChar, id);
+    });
+
+    if (search) {
+      request.input("search", sql.NVarChar, `%${search}%`);
+    }
+
+    const ids = currentBatch.map((_, i) => `@id${i}`).join(",");
+
+    const downline = await request.query(`
+      SELECT
+          MemberID,
+          MemberName,
+          PlacementID,
+          SponserID,
+          DOJ,
+          Leaf,
+          BV
+      FROM Member_View
+      WHERE PlacementID IN (${ids})
+      ${
+        search
+          ? `
+      AND (
+          MemberID LIKE @search
+          OR MemberName LIKE @search
+      )
+      `
+          : ""
+      }
+  `);
+
+    members.push(...downline.recordset);
+
+    queue.push(...downline.recordset.map((x) => x.MemberID));
+  }
+
+  members = members.slice(0, limit);
+
+  return {
+    members: members.map((m) => ({
+      id: m.MemberID,
+      name: m.MemberName,
+      placementId: m.PlacementID,
+      joinDate: m.DOJ,
+      leg: m.Leaf,
+      bv: Number(m.BV || 0),
+      active: Number(m.BV || 0) > 0,
+      rank: "Distributor",
+    })),
+
+    nextCursor:
+      queue.length > 0
+        ? Buffer.from(JSON.stringify(queue)).toString("base64")
+        : null,
+  };
 }
 
-router.get("/left/:userId", async (req, res) => {
+async function getLegStats(userId, leg) {
+  const pool = await poolPromise;
+
+  const stats = {
+    total: 0,
+    active: 0,
+    totalBV: 0,
+  };
+
+  // Get first member of the requested leg
+  const first = await pool
+    .request()
+    .input("userId", sql.NVarChar, userId)
+    .input("leg", sql.NVarChar, leg).query(`
+      SELECT
+          MemberID,
+          BV
+      FROM Member_View
+      WHERE PlacementID = @userId
+      AND Leaf = @leg
+    `);
+
+  if (!first.recordset.length) {
+    return stats;
+  }
+
+  const firstMember = first.recordset[0];
+
+  let queue = [firstMember.MemberID];
+
+  // Count first member
+  stats.total++;
+  stats.totalBV += Number(firstMember.BV || 0);
+
+  if (Number(firstMember.BV || 0) > 0) {
+    stats.active++;
+  }
+
+  // BFS Traversal
+  while (queue.length) {
+    const currentBatch = [...queue];
+    queue = [];
+
+    const request = pool.request();
+
+    currentBatch.forEach((id, index) => {
+      request.input(`id${index}`, sql.NVarChar, id);
+    });
+
+    const ids = currentBatch.map((_, i) => `@id${i}`).join(",");
+
+    const result = await request.query(`
+      SELECT
+          MemberID,
+          BV
+      FROM Member_View
+      WHERE PlacementID IN (${ids})
+    `);
+
+    if (!result.recordset.length) {
+      continue;
+    }
+
+    for (const member of result.recordset) {
+      queue.push(member.MemberID);
+
+      const bv = Number(member.BV || 0);
+
+      stats.total++;
+      stats.totalBV += bv;
+
+      if (bv > 0) {
+        stats.active++;
+      }
+    }
+  }
+
+  return stats;
+}
+
+router.get("/:leg/:userId", async (req, res) => {
   try {
-    const data = await getLegMembers(req.params.userId, "Left");
+    const { userId, leg } = req.params;
+
+    const limit = Number(req.query.limit || 10);
+
+    const search = (req.query.search || "").trim();
+
+    // cursor from previous request
+    let queue = req.query.queue
+      ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
+      : [];
+
+    const data = await getLegMembers(userId, leg, queue, limit, search);
+
     res.json(data);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
 router.get("/right/:userId", async (req, res) => {
   try {
-    const data = await getLegMembers(req.params.userId, "Right");
+    const { userId, leg } = req.params;
+
+    const limit = Number(req.query.limit || 10);
+
+    const search = (req.query.search || "").trim();
+
+    // cursor from previous request
+    let queue = req.query.queue
+      ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
+      : [];
+
+    const data = await getLegMembers(userId, leg, queue, limit, search);
+
     res.json(data);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
+router.get("/:leg/:userId/stats", async (req, res) => {
+  try {
+    const { userId, leg } = req.params;
+
+    const stats = await getLegStats(userId, leg);
+
+    res.json({
+      success: true,
+      stats,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 

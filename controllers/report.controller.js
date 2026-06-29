@@ -202,6 +202,7 @@ export async function getPayTransferReport(req, res) {
     const { dateList, memberId } = req.query;
 
     const pool = await poolPromise;
+    console.log(dateList);
 
     const result = await pool
       .request()
@@ -788,5 +789,37 @@ export async function getVerificationList(req, res) {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server Error" });
+  }
+}
+
+export async function getPaidDatesPayout(req, res) {
+  try {
+    const pool = await poolPromise;
+
+    const result = await pool.request().execute("Get_PaymentDate");
+
+    const data = result.recordset || [];
+
+    const response = data.map((row) => {
+      const dt = new Date(row.PaymentDate);
+
+      const year = dt.getFullYear();
+      const month = dt.getMonth() + 1;
+      const day = dt.getDate();
+
+      return {
+        Status: `${day}-${month}-${year}`,
+        Flag: `${year}-${month}-${day}`,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: response,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ msg: "Internal Server Error", err: error.message });
   }
 }

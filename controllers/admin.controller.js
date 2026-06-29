@@ -930,6 +930,141 @@ export const addNews = async (req, res) => {
   }
 };
 
+export const addFranchise = async (req, res) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    const MemberNo = "MAZ" + Math.floor(10000 + Math.random() * 90000);
+    const userType = "Franchise";
+    const password = req.body.password;
+    const encryptedPassword = await OOPs.encrypt(password);
+
+    if (!req.body.memberName || !req.body.gender || !req.body.password) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, gender and password are required",
+      });
+    }
+
+    // INSERTING INTO MEMBER LOGIN DETAIL
+    await transaction.begin();
+    const authRequest = new sql.Request(transaction);
+    const authResult = await authRequest
+      .input("MemberID", sql.NVarChar, MemberNo)
+      .input("UserID", sql.NVarChar, MemberNo)
+      .input("UserType", sql.NVarChar, userType)
+      .input("Password", sql.NVarChar, encryptedPassword)
+      .input("LastLogin", sql.DateTime, new Date()).query(`
+      INSERT INTO MemberLoginDetail
+      (
+          MemberID,
+          UserType,
+          UserID,
+          Password,
+          LastLogin,
+          Status
+      )
+      VALUES
+      (
+          @MemberID,
+          @UserType,
+          @UserID,
+          @Password,
+          @LastLogin,
+          'Active'
+      );
+
+      DECLARE @LoginID INT = SCOPE_IDENTITY();
+
+      UPDATE MemberLoginDetail
+      SET MID = @LoginID
+      WHERE LoginID = @LoginID;
+
+      SELECT @LoginID AS MID;
+  `);
+
+    const MID = authResult.recordset[0].MID;
+
+    // INSERTING INTO MEMBER INFO TABLE
+    const memberInfoRequest = new sql.Request(transaction);
+    await memberInfoRequest
+      .input("MID", sql.Int, MID)
+      .input("MemberID", sql.NVarChar, MemberNo)
+      .input("MemberName", sql.NVarChar, req.body.memberName)
+      .input("GuardianName", sql.NVarChar, req.body.guardianName)
+      .input("Gender", sql.NVarChar, req.body.gender)
+      .input("Age", sql.NVarChar, String(req.body.age))
+      .input("Address", sql.NVarChar, req.body.address)
+      .input("District", sql.NVarChar, String(req.body.districtId))
+      .input("StateID", sql.NVarChar, String(req.body.stateId))
+      .input("Pincode", sql.NVarChar, String(req.body.pincode))
+      .input("ContactNo", sql.NVarChar, req.body.contactNo)
+      .input("AltContactNo", sql.NVarChar, req.body.altContactNo)
+      .input("EmailID", sql.NVarChar, req.body.email)
+      .input("AadharNo", sql.NVarChar, req.body.aadharNumber)
+      .input("PAN", sql.NVarChar, req.body.panNumber)
+      .input("Status", sql.NVarChar, "Active")
+      .input("ModifyDate", sql.DateTime, new Date())
+      .input("type", sql.NVarChar, "Franchise").query(`
+      INSERT INTO MemberPersonalInfo
+      (
+          MID,
+          MemberID,
+          MemberName,
+          GuardianName,
+          Gender,
+          Age,
+          Address,
+          District,
+          StateID,
+          Pincode,
+          ContactNo,
+          AltContactNo,
+          EmailID,
+          AadharNo,
+          PAN,
+          Status,
+          ModifyDate,
+          ExtraFD
+      )
+      VALUES
+      (
+          @MID,
+          @MemberID,
+          @MemberName,
+          @GuardianName,
+          @Gender,
+          @Age,
+          @Address,
+          @District,
+          @StateID,
+          @Pincode,
+          @ContactNo,
+          @AltContactNo,
+          @EmailID,
+          @AadharNo,
+          @PAN,
+          @Status,
+          @ModifyDate,
+          @type
+      );
+
+      
+  `);
+
+    await transaction.commit();
+
+    return res.status(200).json({ success: true, msg: "Ok" });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Insert Franchise Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1215,5 +1350,18 @@ export const verifyPAN = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+export const getPurchaseReceipt = (req, res) => {
+  try {
+  } catch (error) {
+    return res
+      .status(500)
+      .json({
+        msg: "Internal Server Error",
+        success: false,
+        error: error.message,
+      });
   }
 };

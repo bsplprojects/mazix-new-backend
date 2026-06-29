@@ -1,9 +1,11 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import helmet from "helmet";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 
 import authRoutes from "./routes/auth.routes.js";
 import joiningRoutes from "./routes/joining.routes.js";
@@ -24,14 +26,36 @@ const app = express();
 const PORT = process.env.PORT ?? 3000;
 
 // CORS for React frontend
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://mymazix.com",
+  "https://www.mymazix.com",
+];
+
+console.log("🚀 RUNNING APP.JS");
+app.use((req, res, next) => {
+  console.log(">>>", req.method, req.originalUrl);
+  next();
+});
+
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://mymazix.com/"],
-    credentials: true, // allow cookies if you keep session
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
+app.options(/.*/, cors());
+
 app.use(express.json());
+app.use(compression());
+app.use(helmet());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
@@ -40,7 +64,7 @@ const limiter = rateLimit({
   max: 100,
 });
 
-app.use(limiter);
+// app.use(limiter);
 
 // API Docs
 app.use("/api-docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
@@ -60,6 +84,13 @@ app.get("/", (req, res) => {
   res.send("Server Running 🚀");
 });
 
-app.listen(PORT, () =>
+const server = app.listen(PORT, () =>
   console.log(`Server running on http://localhost:${PORT}`),
 );
+
+process.on("SIGTERM", () => {
+  console.log("SIGTERM signal received, Closing the HTTP server");
+  server.close(() => {
+    console.log("HTTP server closed");
+  });
+});

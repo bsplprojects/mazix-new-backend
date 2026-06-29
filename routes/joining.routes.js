@@ -118,8 +118,6 @@ router.post("/register", async (req, res) => {
 
     const CurrentWallet = Object.values(wallet.recordset?.[0] || {})[0] || 0;
 
-    console.log(CurrentWallet);
-
     if (Number(CurrentWallet) < regAmnt || regBV < 50) {
       await transaction.rollback();
       return res.json({
@@ -146,7 +144,7 @@ router.post("/register", async (req, res) => {
     }
 
     /* ================= MEMBER NO ================= */
-    const MemberNo = "MB" + Math.floor(10000 + Math.random() * 90000);
+    const MemberNo = "MAZ" + Math.floor(10000 + Math.random() * 90000);
 
     /* ================= INSERT MEMBER ================= */
     const insertMember = await request.query(`

@@ -4,11 +4,23 @@ import sql from "mssql";
 import jwt from "jsonwebtoken";
 import { poolPromise } from "../db.js";
 import OOPs from "../OOPs.js";
+import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many login attempts, please try again after 15 minutes.",
+  },
+});
+
 //  MEMBER LOGIN
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const { MemberID, Password } = req.body;
 
@@ -48,15 +60,13 @@ router.post("/login", async (req, res) => {
     }
 
     const user = result.recordset[0];
-
-    // const decryptedPassword = await OOPs.decrypt(user.Password);
-
-    // if (decryptedPassword !== Password) {
-    //   return res.status(401).json({
-    //     success: false,
-    //     message: "Invalid MemberID or Password",
-    //   });
-    // }
+    const decryptedPassword = await OOPs.decrypt(user.Password);
+    if (decryptedPassword !== Password) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Member ID or Password",
+      });
+    }
 
     if (user.Status === false || user.Flag === false) {
       return res.status(403).json({
@@ -70,6 +80,7 @@ router.post("/login", async (req, res) => {
         MID: user.MID,
         MemberID: user.MemberID,
         UserType: user.UserType,
+        role: "member",
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" },

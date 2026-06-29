@@ -24,12 +24,15 @@ import {
   addNews,
   deleteNews,
   deleteEvents,
+  addFranchise,
+  getPurchaseReceipt,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 
 const router = express.Router();
 
 router.route("/login").post(adminLogin);
+router.route("/purchase-receipt/:id").get(isAdmin, getPurchaseReceipt);
 router.route("/header").get(isAdmin, getHeaderValue);
 router.route("/charts").get(isAdmin, getDashboardCharts);
 router.route("/members").get(isAdmin, getAllMembers);
@@ -49,6 +52,7 @@ router.route("/product/new").post(isAdmin, addProduct);
 router.route("/password").post(isAdmin, getMemberPassword);
 router.route("/pan/verify").post(isAdmin, verifyPAN);
 router.route("/news/new").post(isAdmin, addNews);
+router.route("/franchise/new").post(isAdmin, addFranchise);
 
 router.route("/product/:id").delete(isAdmin, deleteProduct);
 router.route("/category/:id").delete(isAdmin, deleteCategory);

@@ -17,10 +17,9 @@ const allowedOrigins = [
   "https://www.mymazix.com",
 ];
 
-console.log("🚀 RUNNING SERVER.JS");
-
 const corsOptions = {
   origin: (origin, callback) => {
+    // Allow requests from Postman, curl, server-to-server
     if (!origin) {
       return callback(null, true);
     }
@@ -47,8 +46,10 @@ const corsOptions = {
   optionsSuccessStatus: 200,
 };
 
+// CORS must come before routes
 app.use(cors(corsOptions));
 
+// Handle preflight requests
 app.options("*", cors(corsOptions));
 
 app.use(express.json());
@@ -66,6 +67,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reward", rewardRoutes);
 app.use("/api/users", usersRoutes);
 
+// Global error handler
 app.use((err, req, res, next) => {
   console.error(err);
 

@@ -17,10 +17,9 @@ const allowedOrigins = [
   "https://www.mymazix.com",
 ];
 
-console.log("🚀 RUNNING SERVER.JS");
-
 const corsOptions = {
   origin: (origin, callback) => {
+    // Allow requests from Postman, curl, server-to-server
     if (!origin) {
       return callback(null, true);
     }

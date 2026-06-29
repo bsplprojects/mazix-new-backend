@@ -17,8 +17,6 @@ const allowedOrigins = [
   "https://www.mymazix.com",
 ];
 
-console.log("🚀 RUNNING SERVER.JS");
-
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) {

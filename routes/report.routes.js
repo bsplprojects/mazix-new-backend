@@ -13,6 +13,7 @@ import {
   getPurchaseReport,
   getRepurchaseVoucherReport,
   getVerificationList,
+  getPaidDatesPayout,
 } from "../controllers/report.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 
@@ -31,5 +32,6 @@ router.route("/product-sale").get(isAdmin, getProductSaleReport);
 router.route("/product-sale-joining").get(isAdmin, getProductSaleWithJoining);
 router.route("/products").get(isAdmin, getProductList);
 router.route("/kyc-list").get(isAdmin, getVerificationList);
+router.route("/paid-dates").get(isAdmin, getPaidDatesPayout);
 
 export default router;
