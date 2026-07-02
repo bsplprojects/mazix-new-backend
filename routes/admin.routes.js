@@ -30,6 +30,7 @@ import {
   getMemberPayoutDetails,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
+import { upload } from "../lib/multer.js";
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);
 router.route("/package/new").post(isAdmin, addPackage);
 router.route("/category/new").post(isAdmin, addCategory);
-router.route("/product/new").post(isAdmin, addProduct);
+router.route("/product/new").post(isAdmin, upload.single("Image"), addProduct);
 router.route("/password").post(isAdmin, getMemberPassword);
 router.route("/pan/verify").post(isAdmin, verifyPAN);
 router.route("/news/new").post(isAdmin, addNews);

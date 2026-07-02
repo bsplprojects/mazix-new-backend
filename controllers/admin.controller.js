@@ -767,12 +767,30 @@ export const addProduct = async (req, res) => {
       BV,
       Repurchase,
       seqOnline,
+      Image,
     } = req.body;
 
     const pool = await poolPromise;
 
+    let imageURL = Image || null;
+
+    if (req.file?.filename) {
+      imageURL = `../../Uploads/${req.file.filename}`;
+    }
+
     if (pID && Number(pID) > 0) {
-      // Update Product
+      if (!req.file?.filename && !Image) {
+        const existingProduct = await pool
+          .request()
+          .input("pID", sql.BigInt, pID).query(`
+            SELECT Image
+            FROM ProductMaster
+            WHERE pID = @pID
+          `);
+
+        imageURL = existingProduct.recordset[0]?.Image || null;
+      }
+
       await pool
         .request()
         .input("pID", sql.BigInt, pID)
@@ -786,8 +804,9 @@ export const addProduct = async (req, res) => {
         .input("Status", sql.VarChar, Status)
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
-        .input("Repurchase", sql.Int, Repurchase)
-        .input("seqOnline", sql.Int, seqOnline)
+        .input("Repurchase", sql.Int, Number(Repurchase) || 0)
+        .input("seqOnline", sql.Int, Number(seqOnline) || 0)
+        .input("Image", sql.NVarChar, imageURL)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           UPDATE ProductMaster
           SET
@@ -803,11 +822,11 @@ export const addProduct = async (req, res) => {
             BV = @BV,
             Repurchase = @Repurchase,
             seqOnline = @seqOnline,
+            Image = @Image,
             ModifyDate = @ModifyDate
           WHERE pID = @pID
         `);
     } else {
-      // Insert Product
       await pool
         .request()
         .input("pCatID", sql.BigInt, pCatID)
@@ -820,8 +839,9 @@ export const addProduct = async (req, res) => {
         .input("Status", sql.VarChar, Status)
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
-        .input("Repurchase", sql.Int, Repurchase)
-        .input("seqOnline", sql.Int, seqOnline)
+        .input("Repurchase", sql.Int, Number(Repurchase) || 0)
+        .input("seqOnline", sql.Int, Number(seqOnline) || 0)
+        .input("Image", sql.NVarChar, imageURL)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           INSERT INTO ProductMaster
           (
@@ -837,6 +857,7 @@ export const addProduct = async (req, res) => {
             BV,
             Repurchase,
             seqOnline,
+            Image,
             ModifyDate
           )
           VALUES
@@ -853,6 +874,7 @@ export const addProduct = async (req, res) => {
             @BV,
             @Repurchase,
             @seqOnline,
+            @Image,
             @ModifyDate
           )
         `);
