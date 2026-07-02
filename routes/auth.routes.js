@@ -8,19 +8,19 @@ import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many login attempts, please try again after 15 minutes.",
-  },
-});
+// const loginLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 5,
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: {
+//     success: false,
+//     message: "Too many login attempts, please try again after 15 minutes.",
+//   },
+// });
 
 //  MEMBER LOGIN
-router.post("/login", loginLimiter, async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { MemberID, Password } = req.body;
 
