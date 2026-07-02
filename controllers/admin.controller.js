@@ -1353,15 +1353,140 @@ export const verifyPAN = async (req, res) => {
   }
 };
 
-export const getPurchaseReceipt = (req, res) => {
+export const getPurchaseReceipt = async (req, res) => {
   try {
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        msg: "Internal Server Error",
-        success: false,
-        error: error.message,
+    return res.status(500).json({
+      msg: "Internal Server Error",
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+export const getMemberPayoutDate = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+
+    const result = await pool.request().execute("Get_PayoutGenerateDate");
+
+    const data = result.recordset || [];
+    const rm = data.map((row) => {
+      const dt = new Date(row.PayoutDate);
+
+      const day = dt.getDate();
+      const month = dt.getMonth() + 1;
+      const year = dt.getFullYear();
+
+      return {
+        Status: `${day}-${month}-${year}`,
+        Flag: `${year}-${month}-${day}`,
+      };
+    });
+
+    res.json(rm);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getMemberPayoutDetails = async (req, res) => {
+  try {
+    const { dateList, PANList } = req.query;
+
+    const pool = await poolPromise;
+
+    // Call Stored Procedure
+    const payoutResult = await pool
+      .request()
+      .input("fromDate", dateList)
+      .input("pan", PANList)
+      .execute("Get_MemberPaymentTransfer");
+
+    const payouts = payoutResult.recordset;
+
+    const response = [];
+
+    for (const item of payouts) {
+      // Fetch Bank Details
+      const bankResult = await pool.request().input("MID", item.MID).query(`
+            SELECT TOP 1
+                AcName,
+                AcNo,
+                AcType,
+                Bank,
+                IFSC,
+                Branch
+            FROM MemberBankDetail
+            WHERE MID = @MID
+        `);
+
+      const bank = bankResult.recordset[0] || {};
+
+      const payoutDate = new Date(item.PayoutDate);
+
+      response.push({
+        BinaryPayoutID: item.BinaryPayoutID,
+        MemberID: item.MemberID,
+        MemberName: item.MemberName,
+        PAN: item.PAN,
+
+        CurrentLeft: item.CurrentLeft,
+        CurrentRight: item.CurrentRight,
+
+        PurCurrentLeft: item.PurCurrentLeft,
+        PurCurrentRight: item.PurCurrentRight,
+
+        OldLeftCarry: item.OldLeftCarry,
+        OldRightCarry: item.OldRightCarry,
+
+        TotalLeft: item.TotalLeft,
+        TotalRight: item.TotalRight,
+
+        Pair: item.Pair,
+        Capping: item.Capping,
+
+        CarryLeft: item.CarryLeft,
+        CarryRight: item.CarryRight,
+
+        Amount: item.Amount,
+        TDS: item.TDS,
+        AdminCharge: item.AdminCharge,
+        Vouchur: item.Vouchur,
+        Payable: item.Payable,
+
+        Pdate: payoutDate.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+
+        PayoutFromDate: item.PayoutFromDate,
+        PayoutToDate: item.PayoutToDate,
+
+        Status: item.Status,
+        Flag: item.Flag,
+        Bonus: item.Bonus?.toString(),
+
+        AcName: bank.AcName || "",
+        AcNo: bank.AcNo || "",
+        AcType: bank.AcType || "",
+        Bank: bank.Bank || "",
+        IFSC: bank.IFSC || "",
+        Branch: bank.Branch || "",
       });
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

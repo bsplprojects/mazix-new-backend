@@ -180,7 +180,7 @@ export async function getMemberDetail(req, res) {
     }
 
     const pool = await poolPromise;
-    const request = pool.request();
+    const request = await pool.request();
 
     let query = `
     SELECT *

@@ -26,6 +26,8 @@ import {
   deleteEvents,
   addFranchise,
   getPurchaseReceipt,
+  getMemberPayoutDate,
+  getMemberPayoutDetails,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 
@@ -43,6 +45,8 @@ router.route("/products").get(isAdmin, getProducts);
 router.route("/categories").get(isAdmin, getCategories);
 router.route("/pan").get(isAdmin, getPANRecord);
 router.route("/news-feed").get(isAdmin, getNewsFeed);
+router.route("/member-payout-date").get(isAdmin, getMemberPayoutDate);
+router.route("/member-payout-details").get(isAdmin, getMemberPayoutDetails);
 
 router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);
