@@ -13,12 +13,7 @@ router.get("/products", async (req, res) => {
 
     const result = await pool.request().query(`
       SELECT
-        pID,
-        Product,
-        MemberMRP,
-        BV,
-        GST,
-        Image
+       *
       FROM ProductMaster
       WHERE Status = 'Active'
       ORDER BY MemberMRP;
@@ -27,7 +22,9 @@ router.get("/products", async (req, res) => {
     res.json(
       result.recordset.map((p) => ({
         id: p.pID,
+        catId: p.pCatID,
         name: p.Product,
+        MRP: p.MRP,
         price: Number(p.MemberMRP || 0),
         bv: Number(p.BV || 0),
         gst: Number(p.GST || 0),
