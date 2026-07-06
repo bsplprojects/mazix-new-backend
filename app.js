@@ -19,6 +19,11 @@ import reportRoutes from "./routes/report.routes.js";
 import swaggerSpec from "./swagger.js";
 import swaggerUI from "swagger-ui-express";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // https://api.mymazix.com/
 
@@ -55,7 +60,18 @@ app.options(/.*/, cors());
 
 app.use(express.json());
 app.use(compression());
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
+    contentSecurityPolicy: {
+      directives: {
+        imgSrc: ["'self'", "data:", "https://app.mymazix.com"],
+      },
+    },
+  }),
+);
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
@@ -68,6 +84,8 @@ const limiter = rateLimit({
 
 // API Docs
 app.use("/api-docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
+
+app.use("/uploads", express.static(path.join(__dirname, "Uploads")));
 
 // Routes
 app.use("/api/v1/auth", authRoutes);

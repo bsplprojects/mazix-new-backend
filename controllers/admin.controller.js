@@ -801,7 +801,7 @@ export const addProduct = async (req, res) => {
         .input("MemberMRP", sql.Decimal(18, 2), MemberMRP)
         .input("StockistMRP", sql.Decimal(18, 2), StockistMRP)
         .input("GST", sql.Decimal(18, 2), GST)
-        .input("Status", sql.VarChar, Status)
+        .input("Status", sql.VarChar, Status || "Active")
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
         .input("Repurchase", sql.Int, Number(Repurchase) || 0)
@@ -1377,11 +1377,156 @@ export const verifyPAN = async (req, res) => {
 
 export const getPurchaseReceipt = async (req, res) => {
   try {
-  } catch (error) {
+    const { orderNo } = req.query;
+
+    if (!orderNo || orderNo.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Order Number",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    // Fetch Order Header
+    const orderResult = await pool
+      .request()
+      .input("OrderNo", sql.NVarChar, orderNo).query(`
+        SELECT
+            OrderNo,
+            OrderDate,
+            Name,
+            Phone,
+            Email,
+            Address,
+            City,
+            State,
+            PinCode,
+            PayMode,
+            ISNULL(PaymentStatus,'Paid') AS PaymentStatus,
+            ISNULL(DeliveryStatus,'Pending') AS DeliveryStatus,
+            ISNULL(DiscountAmount,0) AS DiscountAmount,
+            ISNULL(ShippingCharge,0) AS ShippingCharge
+        FROM OrderMaster
+        WHERE OrderNo = @OrderNo
+      `);
+
+    if (orderResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const order = orderResult.recordset[0];
+
+    // Fetch Order Items
+    const itemsResult = await pool
+      .request()
+      .input("OrderNo", sql.NVarChar, orderNo).query(`
+        SELECT
+            pm.Product,
+
+            oi.Qty,
+            oi.SaleRate AS Rate,
+            oi.TotalAmount AS GrossAmount,
+
+            oi.HSNCode,
+            ISNULL(oi.TaxPercent,0) AS GSTRate,
+
+            ISNULL(oi.CGST,0) AS CGSTAmount,
+            ISNULL(oi.SGST,0) AS SGSTAmount,
+            ISNULL(oi.IGST,0) AS IGSTAmount,
+
+            (
+                ISNULL(oi.CGST,0) +
+                ISNULL(oi.SGST,0) +
+                ISNULL(oi.IGST,0)
+            ) AS GSTAmount,
+
+            (
+                oi.TotalAmount -
+                (
+                    ISNULL(oi.CGST,0) +
+                    ISNULL(oi.SGST,0) +
+                    ISNULL(oi.IGST,0)
+                )
+            ) AS TaxableAmount
+
+        FROM OrderItems oi
+        INNER JOIN ProductMaster pm
+            ON oi.ProductID = pm.pID
+
+        WHERE oi.OrderID = @OrderNo
+      `);
+
+    const items = itemsResult.recordset;
+
+    // Totals
+    const subTotal = items.reduce(
+      (sum, item) => sum + Number(item.TaxableAmount),
+      0,
+    );
+
+    const totalCGST = items.reduce(
+      (sum, item) => sum + Number(item.CGSTAmount),
+      0,
+    );
+
+    const totalSGST = items.reduce(
+      (sum, item) => sum + Number(item.SGSTAmount),
+      0,
+    );
+
+    const totalIGST = items.reduce(
+      (sum, item) => sum + Number(item.IGSTAmount),
+      0,
+    );
+
+    const totalGST = totalCGST + totalSGST + totalIGST;
+
+    const grossTotal = items.reduce(
+      (sum, item) => sum + Number(item.GrossAmount),
+      0,
+    );
+
+    const grandTotal =
+      grossTotal + Number(order.ShippingCharge) - Number(order.DiscountAmount);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        orderNo: order.OrderNo,
+        orderDate: order.OrderDate,
+
+        customerName: order.Name,
+        customerPhone: order.Phone,
+        customerEmail: order.Email,
+        customerAddress: `${order.Address}, ${order.City}, ${order.State} - ${order.PinCode}`,
+
+        payMode: order.PayMode,
+        paymentStatus: order.PaymentStatus,
+        deliveryStatus: order.DeliveryStatus,
+
+        subTotal,
+        taxAmount: totalGST,
+        cgstAmount: totalCGST,
+        sgstAmount: totalSGST,
+        igstAmount: totalIGST,
+
+        shipping: Number(order.ShippingCharge),
+        discount: Number(order.DiscountAmount),
+        grandTotal,
+
+        items,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+
     return res.status(500).json({
-      msg: "Internal Server Error",
       success: false,
-      error: error.message,
+      message: err.message,
     });
   }
 };

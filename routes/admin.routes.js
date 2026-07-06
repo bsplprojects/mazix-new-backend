@@ -35,7 +35,7 @@ import { upload } from "../lib/multer.js";
 const router = express.Router();
 
 router.route("/login").post(adminLogin);
-router.route("/purchase-receipt/:id").get(isAdmin, getPurchaseReceipt);
+router.route("/purchase-receipt").get(isAdmin, getPurchaseReceipt);
 router.route("/header").get(isAdmin, getHeaderValue);
 router.route("/charts").get(isAdmin, getDashboardCharts);
 router.route("/members").get(isAdmin, getAllMembers);
