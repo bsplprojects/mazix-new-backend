@@ -691,25 +691,46 @@ export const getCategories = async (req, res) => {
 
 export const addCategory = async (req, res) => {
   try {
-    const { pCatID, Category, seqOnline, Status } = req.body;
+    const { pCatID, Category, seqOnline, Status, Image } = req.body;
+
+    let imageURL = Image || null;
+
+    if (req.file?.filename) {
+      imageURL = `../../Uploads/${req.file.filename?.replace(" ", "_")}`;
+    }
 
     const pool = await poolPromise;
 
     if (pCatID && Number(pCatID) > 0) {
       // Update Category
+
+      if (!req.file?.filename && !Image) {
+        const existingProduct = await pool
+          .request()
+          .input("pCatID", sql.BigInt, pCatID).query(`
+            SELECT Image
+            FROM ProductCategory
+            WHERE pCatID = @pID
+          `);
+
+        imageURL = existingProduct.recordset[0]?.Image || null;
+      }
+
       await pool
         .request()
         .input("pCatID", sql.BigInt, pCatID)
         .input("Category", sql.NVarChar, Category)
         .input("seqOnline", sql.Int, seqOnline)
         .input("Status", sql.VarChar, Status)
+        .input("Image", sql.VarChar, imageURL)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           UPDATE ProductCategory
           SET
             Category = @Category,
             seqOnline = @seqOnline,
             Status = @Status,
-            ModifyDate = @ModifyDate
+            ModifyDate = @ModifyDate,
+            Image = @Image
           WHERE pCatID = @pCatID
         `);
     } else {
@@ -719,20 +740,23 @@ export const addCategory = async (req, res) => {
         .input("Category", sql.NVarChar, Category)
         .input("seqOnline", sql.Int, seqOnline)
         .input("Status", sql.VarChar, Status)
+        .input("Image", sql.VarChar, imageURL)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           INSERT INTO ProductCategory
           (
             Category,
             seqOnline,
             Status,
-            ModifyDate
+            ModifyDate,
+            Image
           )
           VALUES
           (
             @Category,
             @seqOnline,
             @Status,
-            @ModifyDate
+            @ModifyDate,
+            @Image
           )
         `);
     }
@@ -775,7 +799,7 @@ export const addProduct = async (req, res) => {
     let imageURL = Image || null;
 
     if (req.file?.filename) {
-      imageURL = `../../Uploads/${req.file.filename}`;
+      imageURL = `../../Uploads/${req.file.filename?.replace(" ", "_")}`;
     }
 
     if (pID && Number(pID) > 0) {

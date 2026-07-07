@@ -52,7 +52,9 @@ router.route("/member-payout-details").get(isAdmin, getMemberPayoutDetails);
 router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);
 router.route("/package/new").post(isAdmin, addPackage);
-router.route("/category/new").post(isAdmin, addCategory);
+router
+  .route("/category/new")
+  .post(isAdmin, upload.single("Image"), addCategory);
 router.route("/product/new").post(isAdmin, upload.single("Image"), addProduct);
 router.route("/password").post(isAdmin, getMemberPassword);
 router.route("/pan/verify").post(isAdmin, verifyPAN);
