@@ -58,29 +58,37 @@ export async function getLegMembers(
     const ids = currentBatch.map((_, i) => `@id${i}`).join(",");
 
     const downline = await request.query(`
-      SELECT
-          MemberID,
-          MemberName,
-          PlacementID,
-          SponserID,
-          DOJ,
-          Leaf,
-          BV
-      FROM Member_View
-      WHERE PlacementID IN (${ids})
-      ${
-        search
-          ? `
-      AND (
-          MemberID LIKE @search
-          OR MemberName LIKE @search
-      )
-      `
-          : ""
-      }
+     SELECT
+            m.MemberID,
+            m.MemberName,
+            m.PlacementID,
+            m.SponserID,
+            m.DOJ,
+            m.Leaf,
+            m.BV,
+            ISNULL(r.Designation, '') AS Designation
+        FROM Member_View m
+        OUTER APPLY (
+            SELECT TOP (1) Designation
+            FROM MemberRewardSection mr
+            WHERE mr.MemberID = m.MemberID
+            ORDER BY mr.RewardID DESC
+        ) r
+        WHERE m.PlacementID IN (${ids})
+        ${
+          search
+            ? `
+        AND (
+            m.MemberID LIKE @search
+            OR m.MemberName LIKE @search
+        )
+        `
+            : ""
+        }
   `);
 
     members.push(...downline.recordset);
+    // console.log(members);
 
     queue.push(...downline.recordset.map((x) => x.MemberID));
   }
@@ -96,7 +104,7 @@ export async function getLegMembers(
       leg: m.Leaf,
       bv: Number(m.BV || 0),
       active: Number(m.BV || 0) > 0,
-      rank: "Distributor",
+      rank: m.Designation,
     })),
 
     nextCursor:
