@@ -696,7 +696,7 @@ export const addCategory = async (req, res) => {
     let imageURL = Image || null;
 
     if (req.file?.filename) {
-      imageURL = `../../Uploads/${req.file.filename?.replace(" ", "_")}`;
+      imageURL = `../../Uploads/${req.file.filename}`;
     }
 
     const pool = await poolPromise;
@@ -799,7 +799,7 @@ export const addProduct = async (req, res) => {
     let imageURL = Image || null;
 
     if (req.file?.filename) {
-      imageURL = `../../Uploads/${req.file.filename?.replace(" ", "_")}`;
+      imageURL = `../../Uploads/${req.file.filename}`;
     }
 
     if (pID && Number(pID) > 0) {
@@ -972,6 +972,66 @@ export const addNews = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+export const changeMemberPassword = async (req, res) => {
+  try {
+    const memberId = req.query.id;
+    const { oldPassword, password } = req.body;
+
+    if (!oldPassword || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password and new password are required",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    // first check if user exists.
+    const existingUser = await pool
+      .request()
+      .input("MemberID", sql.VarChar, memberId).query(`
+      SELECT TOP 1 * FROM MemberLoginDetail WHERE MemberID = @MemberID  
+    `);
+
+    if (existingUser.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const existingHashedPassword = existingUser.recordset[0].Password;
+
+    const decryptedPassword = await OOPs.decrypt(existingHashedPassword);
+
+    if (decryptedPassword !== oldPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect",
+      });
+    }
+
+    // hash the new password
+    const hashedNewPassword = await OOPs.encrypt(password);
+
+    const result = await pool
+      .request()
+      .input("Password", sql.VarChar, hashedNewPassword)
+      .input("MemberID", sql.VarChar, memberId).query(`
+        UPDATE MemberLoginDetail SET Password = @Password WHERE MemberID = @MemberID
+      `);
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Password Updated Successfully" });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
     });
   }
 };

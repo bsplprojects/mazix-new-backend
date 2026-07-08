@@ -4,6 +4,7 @@ import sql from "mssql";
 import {
   getMemberData,
   getDatewiseDownline,
+  getTeamBV,
 } from "../controllers/team.controller.js";
 import { getLegMembers, getLegStats } from "../helpers/getLegMembers.js";
 
@@ -262,5 +263,8 @@ router.get("/:leg/:userId/stats", async (req, res) => {
     });
   }
 });
+
+router.get("/bv", getTeamBV);
+
 
 export default router;

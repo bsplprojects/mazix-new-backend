@@ -33,12 +33,11 @@ router.post("/login", async (req, res) => {
 
     const pool = await poolPromise;
 
-    // Encrypt password before DB check
-    const encPassword = await OOPs.encrypt(Password);
+    // check for existing user
+    // const encPassword = await OOPs.encrypt(Password);
     const result = await pool
       .request()
-      .input("MemberID", sql.NVarChar, MemberID)
-      .input("Password", sql.NVarChar, encPassword).query(`
+      .input("MemberID", sql.NVarChar, MemberID).query(`
         SELECT TOP 1
           LoginID,
           MID,
@@ -55,13 +54,14 @@ router.post("/login", async (req, res) => {
     if (result.recordset.length === 0) {
       return res.status(401).json({
         success: false,
-        message: "Invalid MemberID or Password",
+        message: "User not found",
       });
     }
 
     const user = result.recordset[0];
     const decryptedPassword = await OOPs.decrypt(user.Password);
-    if (decryptedPassword !== Password) {
+
+    if (decryptedPassword.trim() !== Password.trim()) {
       return res.status(401).json({
         success: false,
         message: "Invalid Member ID or Password",

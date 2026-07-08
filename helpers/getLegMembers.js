@@ -193,3 +193,51 @@ export async function getLegStats(userId, leg) {
 
   return stats;
 }
+
+export async function getLegMembersForBV(userId, leg) {
+  const pool = await poolPromise;
+
+  const result = await pool
+    .request()
+    .input("userId", sql.NVarChar, userId)
+    .input("leg", sql.NVarChar, leg).query(`
+      ;WITH Downline AS
+      (
+          -- First member of the requested leg
+          SELECT
+              MemberID
+          FROM MemberEnrollment
+          WHERE PlacementID = @userId
+            AND Leaf = @leg
+
+          UNION ALL
+
+          -- Recursively fetch descendants
+          SELECT
+              md.MemberID
+          FROM MemberEnrollment md
+          INNER JOIN Downline d
+              ON md.PlacementID = d.MemberID
+      )
+
+      SELECT
+          md.MemberID,
+          md.PlacementID,
+          md.SponserID,
+          md.DOJ,
+          md.Leaf
+      FROM Downline d
+      INNER JOIN MemberEnrollment md
+          ON md.MemberID = d.MemberID
+
+      OPTION (MAXRECURSION 0);
+    `);
+
+  return result.recordset.map((m) => ({
+    id: m.MemberID,
+    placementId: m.PlacementID,
+    joinDate: m.DOJ,
+    leg: m.Leaf,
+    active: Number(m.BV || 0) > 0,
+  }));
+}

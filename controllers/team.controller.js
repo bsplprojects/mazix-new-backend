@@ -1,5 +1,6 @@
 import sql from "mssql";
 import { poolPromise } from "../db.js";
+import { getLegMembersForBV } from "../helpers/getLegMembers.js";
 
 export const getMemberData = async (req, res) => {
   try {
@@ -163,6 +164,27 @@ export const getDatewiseDownline = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+export const getTeamBV = async (req, res) => {
+  try {
+    const { org, memberId } = req.query;
+
+    // fetch all the leg (left, right) team for the memberId;
+    const pool = await poolPromise;
+
+    const legMembers = await getLegMembersForBV(memberId, org);
+
+    return res.status(200).json({
+      success: true,
+      message: `${org} Team's Joining and Repurchase BV`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
     });
   }
 };
