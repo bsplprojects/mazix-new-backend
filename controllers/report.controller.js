@@ -83,7 +83,7 @@ export async function getAdminChargeDetail(req, res) {
   }
 }
 
-export async function getWalletTransferReport(req, res) {
+export async function getRepurchaseWalletTransfer(req, res) {
   try {
     const { MemberId, FromDate, Todate } = req.query;
 
@@ -91,39 +91,10 @@ export async function getWalletTransferReport(req, res) {
 
     const result = await pool
       .request()
-      .input("MemberID", sql.VarChar, MemberId)
-      .input("Fromdate", sql.DateTime, FromDate)
-      .input("Todate", sql.DateTime, Todate).query(`
-        SELECT
-            wt.MemberID,
-            wt.PrevAmount,
-            wt.Amount,
-            wt.FromMemberID,
-            wt.Flag,
-            wt.ModifyDate,
-
-            mpi.MemberName AS Status,
-
-            CASE
-                WHEN wt.FromMemberID = 'admin'
-                THEN 'ADMIN'
-                ELSE mpi2.MemberName
-            END AS WalletType
-
-        FROM WalletTransfer wt
-
-        LEFT JOIN MemberPersonalInfo mpi
-            ON mpi.MemberID = wt.MemberID
-
-        LEFT JOIN MemberPersonalInfo mpi2
-            ON mpi2.MemberID = wt.FromMemberID
-
-        WHERE wt.MemberID = @MemberID
-          AND CAST(wt.[Date] AS DATE)
-              BETWEEN CAST(@Fromdate AS DATE)
-                  AND CAST(@Todate AS DATE)
-
-        ORDER BY wt.ModifyDate DESC
+      .input("MemberID", sql.NVarChar(sql.MAX), MemberId || "")
+      .input("Fromdate", sql.NVarChar(sql.MAX), FromDate || "")
+      .input("Todate", sql.NVarChar(sql.MAX), Todate || "").query(`
+        SELECT * FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate
       `);
 
     return res.status(200).json({
@@ -131,11 +102,67 @@ export async function getWalletTransferReport(req, res) {
       data: result.recordset,
     });
   } catch (error) {
-    console.error("getWalletTransferHistory Error:", error);
+    console.error("getAdminChargeDetail Error:", error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+}
+
+export async function getWalletTransferReport(req, res) {
+  try {
+    const { MemberId, FromDate, Todate } = req.query;
+
+    const pool = await poolPromise;
+
+    let walletTransfer = [];
+
+    if (MemberId || FromDate || Todate) {
+      const result = await pool
+        .request()
+        .input("memberID", sql.NVarChar, MemberId || "")
+        .input("fromDate", sql.NVarChar, FromDate || "")
+        .input("toDate", sql.NVarChar, Todate || "")
+        .execute("Get_WalletTransferReport");
+
+      walletTransfer = result.recordset;
+
+      const totalSend = walletTransfer
+        .filter((x) => x.Flag === "Send")
+        .reduce((sum, x) => sum + Number(x.Amount || 0), 0);
+
+      const totalReceived = walletTransfer
+        .filter((x) => x.Flag === "Received")
+        .reduce((sum, x) => sum + Number(x.Amount || 0), 0);
+
+      return res.json({
+        success: true,
+        totalSend,
+        totalReceived,
+        data: walletTransfer,
+      });
+    } else {
+      const result = await pool
+        .request()
+        .input("MemberID", sql.NVarChar, "")
+        .input("Fromdate", sql.NVarChar, "")
+        .input("Todate", sql.NVarChar, "")
+        .execute("Get_WalletTransferReport");
+
+      return res.json({
+        success: true,
+        totalSend: 0,
+        totalReceived: 0,
+        data: result.recordset,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 }
