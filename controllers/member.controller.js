@@ -987,3 +987,233 @@ export const uploadUserKYCDocs = async (req, res) => {
     });
   }
 };
+
+export const updatePersonalInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      MemberName,
+      EmailID,
+      Gender,
+      Address,
+      District,
+      StateID,
+      Pincode,
+      Country,
+      ContactNo,
+    } = req.body;
+
+    const pool = await poolPromise;
+
+    await pool
+      .request()
+      .input("MemberID", sql.NVarChar, id)
+      .input("MemberName", sql.NVarChar, MemberName)
+      .input("EmailID", sql.NVarChar, EmailID)
+      .input("Gender", sql.NVarChar, Gender)
+      .input("Address", sql.NVarChar, Address)
+      .input("District", sql.Int, Number(District))
+      .input("StateID", sql.Int, Number(StateID))
+      .input("Pincode", sql.NVarChar, Pincode)
+      .input("Country", sql.NVarChar, Country)
+      .input("ContactNo", sql.NVarChar, ContactNo)
+      .query(`UPDATE MemberPersonalInfo
+        SET
+            MemberName = @MemberName,
+            Gender = @Gender,
+            Address = @Address,
+            District = @District,
+            Country = @Country,
+            Pincode = @Pincode,
+            ContactNo = @ContactNo,
+            EmailID = @EmailID,
+            StateID = @StateID,
+            ModifyDate = GETDATE(),
+            Status = 'Active'
+        WHERE MemberID = @MemberID
+      `);
+
+    return res.json({
+      success: true,
+      message: "Personal information updated successfully.",
+    });
+  } catch (error) {
+    console.error("Update Personal Info:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const updateNomineeInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, age, sex, relation } = req.body;
+
+    const pool = await poolPromise;
+
+    // Check if nominee already exists
+    const existing = await pool.request().input("MID", sql.BigInt, id).query(`
+        SELECT MNomeeID
+        FROM MemberNomineeDetail
+        WHERE MID = @MID
+      `);
+
+    if (existing.recordset.length > 0) {
+      // Update existing nominee
+      await pool
+        .request()
+        .input("MNomeeID", sql.BigInt, id)
+        .input("Nominee", sql.NVarChar, name)
+        .input("Age", sql.Int, age)
+        .input("Sex", sql.NVarChar, sex)
+        .input("Relation", sql.NVarChar, relation).query(`
+          UPDATE MemberNomineeDetail
+          SET
+              Nominee = @Nominee,
+              Age = @Age,
+              Sex = @Sex,
+              Relation = @Relation,
+              Status = 'Active'
+          WHERE MNomeeID = @MNomeeID
+        `);
+    } else {
+      // Insert new nominee
+      await pool
+        .request()
+        .input("MID", sql.BigInt, id)
+        .input("Nominee", sql.NVarChar, name)
+        .input("Age", sql.Int, age)
+        .input("Sex", sql.NVarChar, sex)
+        .input("Relation", sql.NVarChar, relation ? relation : "Nothing")
+        .query(`
+          INSERT INTO MemberNomineeDetails
+          (
+              MID,
+              Nominee,
+              Age,
+              Sex,
+              Relation,
+              Status
+          )
+          VALUES
+          (
+              @MID,
+              @Nominee,
+              @Age,
+              @Sex,
+              @Relation,
+              'Active'
+          )
+        `);
+    }
+
+    return res.json({
+      success: true,
+      message: "Nominee information updated successfully.",
+    });
+  } catch (error) {
+    console.error("Update Nominee Info:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const updateBankInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { accountHolder, bankName, accNo, ifsc, branch, accType } = req.body;
+    console.log(id);
+    const pool = await poolPromise;
+
+    // Check if bank details already exist
+    const existing = await pool.request().input("MID", sql.BigInt, Number(id))
+      .query(`
+        SELECT MBankID
+        FROM MemberBankDetail
+        WHERE MID = @MID
+      `);
+
+    if (existing.recordset.length > 0) {
+      // Update existing bank details
+      await pool
+        .request()
+        .input("MID", sql.BigInt, Number(id))
+        .input("AcName", sql.NVarChar, accountHolder)
+        .input("AcNo", sql.NVarChar, accNo)
+        .input("AcType", sql.NVarChar, accType)
+        .input("Bank", sql.NVarChar, bankName)
+        .input("IFSC", sql.NVarChar, ifsc)
+        .input("Branch", sql.NVarChar, branch)
+        .input("ModifyDate", sql.DateTime, new Date()).query(`
+          UPDATE MemberBankDetail
+          SET
+              AcName = @AcName,
+              MID = @MID,
+              AcNo = @AcNo,
+              AcType = @AcType,
+              Bank = @Bank,
+              IFSC = @IFSC,
+              Branch = @Branch,
+              ModifyDate = @ModifyDate,
+              Status = 'Active'
+          WHERE MID = @MID
+        `);
+    } else {
+      // Insert new bank details
+      await pool
+        .request()
+        .input("MID", sql.BigInt, id)
+        .input("AcName", sql.NVarChar, accountHolder)
+        .input("AcNo", sql.NVarChar, accNo)
+        .input("AcType", sql.NVarChar, accType)
+        .input("Bank", sql.NVarChar, bankName)
+        .input("IFSC", sql.NVarChar, ifsc)
+        .input("Branch", sql.NVarChar, branch)
+        .input("ModifyDate", sql.DateTime, new Date()).query(`
+          INSERT INTO MemberBankDetail
+          (
+              MID,
+              AcName,
+              AcNo,
+              AcType,
+              Bank,
+              IFSC,
+              Branch,
+              ModifyDate,
+              Status
+          )
+          VALUES
+          (
+              @MID,
+              @AcName,
+              @AcNo,
+              @AcType,
+              @Bank,
+              @IFSC,
+              @Branch,
+              @ModifyDate,
+              'Active'
+          )
+        `);
+    }
+
+    return res.json({
+      success: true,
+      message: "Bank information updated successfully.",
+    });
+  } catch (error) {
+    console.error("Update Bank Info:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

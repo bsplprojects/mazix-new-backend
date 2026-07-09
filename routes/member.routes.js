@@ -12,6 +12,9 @@ import {
   getMemberReward,
   getInvoiceAtJoining,
   uploadUserKYCDocs,
+  updatePersonalInfo,
+  updateNomineeInfo,
+  updateBankInfo,
 } from "../controllers/member.controller.js";
 import { upload } from "../lib/multer.js";
 
@@ -68,5 +71,9 @@ router.route("/kyc/docs").post(
   ]),
   uploadUserKYCDocs,
 );
+
+router.route("/personalinfo/:id").patch(updatePersonalInfo);
+router.route("/nomineeinfo/:id").patch(updateNomineeInfo);
+router.route("/bankinfo/:id").patch(updateBankInfo);
 
 export default router;
