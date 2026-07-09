@@ -42,6 +42,8 @@ export const getMemberWallet = async (req, res) => {
 export const getWalletSendHistory = async (req, res) => {
   try {
     const memberID = req.params?.memberID;
+    const fdate = req.query.fdate;
+    const tdate = req.query.tdate;
 
     if (!memberID) {
       return res.status(401).json({
@@ -58,8 +60,8 @@ export const getWalletSendHistory = async (req, res) => {
     const result = await pool
       .request()
       .input("memberID", sql.VarChar, memberID)
-      .input("fromDate", sql.VarChar, fdt.toISOString())
-      .input("toDate", sql.VarChar, tdt.toISOString())
+      .input("fromDate", sql.VarChar, fdate)
+      .input("toDate", sql.VarChar, tdate)
       .input("status", sql.VarChar, "Received")
       .execute("Get_WalletTransferHistory");
 
@@ -279,6 +281,8 @@ export const getRepurchaseMemberWallet = async (req, res) => {
 export const getRepurchaseMemberWalletHistory = async (req, res) => {
   try {
     const memberID = req.params?.memberID;
+    const fdate = req.query.fdate;
+    const tdate = req.query.tdate;
 
     if (!memberID) {
       return res.status(401).json({
@@ -295,8 +299,8 @@ export const getRepurchaseMemberWalletHistory = async (req, res) => {
     const result = await pool
       .request()
       .input("memberID", sql.VarChar, memberID)
-      .input("fromDate", sql.VarChar, fdt.toISOString())
-      .input("toDate", sql.VarChar, tdt.toISOString())
+      .input("fromDate", sql.VarChar, fdate)
+      .input("toDate", sql.VarChar, tdate)
       .input("status", sql.VarChar, "Received")
       .execute("Get_RepWalletTransferHistory");
 
