@@ -11,7 +11,9 @@ import {
   getMemberDashboard,
   getMemberReward,
   getInvoiceAtJoining,
+  uploadUserKYCDocs,
 } from "../controllers/member.controller.js";
+import { upload } from "../lib/multer.js";
 
 const router = express.Router();
 
@@ -52,8 +54,19 @@ router.route("/invoice-joining/:id").get(getInvoiceAtJoining);
 router.route("/nominee/:mid").get(getNomineeInfo);
 router.route("/bank/:mid").get(getBankInfo);
 router.route("/kyc/:mid").get(getKYCDocumentsList);
+
 router.route("/identity/:mid").get(getMemberIDCardInfo);
 router.route("/downline/:mid").get(getLeftRightTeam);
+
 router.route("/").post(saveUserInfo);
+router.route("/kyc/docs").post(
+  upload.fields([
+    { name: "Aadhar", maxCount: 1 },
+    { name: "Pan", maxCount: 1 },
+    { name: "Passbook", maxCount: 1 },
+    { name: "Photo", maxCount: 1 },
+  ]),
+  uploadUserKYCDocs,
+);
 
 export default router;

@@ -29,6 +29,7 @@ import {
   getMemberPayoutDate,
   getMemberPayoutDetails,
   changeMemberPassword,
+  verifyMemberKYCDoc,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
@@ -62,6 +63,7 @@ router.route("/pan/verify").post(isAdmin, verifyPAN);
 router.route("/news/new").post(isAdmin, addNews);
 router.route("/franchise/new").post(isAdmin, addFranchise);
 router.route("/new-password").post(isAdmin, changeMemberPassword);
+router.route("/verify/:id").post(isAdmin, verifyMemberKYCDoc);
 
 router.route("/product/:id").delete(isAdmin, deleteProduct);
 router.route("/category/:id").delete(isAdmin, deleteCategory);

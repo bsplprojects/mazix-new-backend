@@ -1741,3 +1741,37 @@ export const getMemberPayoutDetails = async (req, res) => {
     });
   }
 };
+
+export const verifyMemberKYCDoc = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pool = await poolPromise;
+
+    const result = await pool.request().input("MemberID", sql.NVarChar, id)
+      .query(`
+        UPDATE MemberKYC
+        SET Status = 'Verify'
+        WHERE MemberID = @MemberID
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "KYC Document not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "KYC verified successfully.",
+    });
+  } catch (error) {
+    console.error("Verify Doc Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong.",
+      error: error.message,
+    });
+  }
+};

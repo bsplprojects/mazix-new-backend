@@ -769,14 +769,16 @@ export async function getRepurchaseVoucherReport(req, res) {
 
 export async function getVerificationList(req, res) {
   try {
-    const { MemberID, Status } = req.query;
+    const { MemberID, Status, page = 1, pageSize = 10 } = req.query;
 
     const pool = await poolPromise;
+
+    // const offset = (Number(page) - 1) * Number(pageSize);
 
     // Call stored procedure
     const result = await pool
       .request()
-      .input("MemberID", sql.VarChar, MemberID)
+      .input("memberID", sql.VarChar, MemberID)
       .input("fromDate", sql.VarChar, Status)
       .input("toDate", sql.VarChar, "")
       .execute("Get_MemberKYCVefivation");

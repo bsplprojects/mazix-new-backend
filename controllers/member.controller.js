@@ -890,3 +890,100 @@ export const getInvoiceAtJoining = async (req, res) => {
     });
   }
 };
+
+export const uploadUserKYCDocs = async (req, res) => {
+  try {
+    const { mid, memberID } = req.query;
+    const files = req.files;
+
+    if (!files || Object.keys(files).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No files selected.",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    const documentMapping = {
+      Aadhar: "AADHAR",
+      Pan: "PAN",
+      Passbook: "BANK PASSBOOK",
+      Photo: "PHOTO",
+    };
+
+    for (const [fieldName, docName] of Object.entries(documentMapping)) {
+      const uploadedFile = files[fieldName]?.[0];
+
+      if (!uploadedFile) continue;
+
+      const docPath = `../../Uploads/${uploadedFile.filename}`;
+
+      const existing = await pool
+        .request()
+        .input("MemberID", sql.VarChar, memberID).query(`
+          SELECT KYCID
+          FROM MemberKYC
+          WHERE MemberID = @MemberID
+        `);
+
+      if (existing.recordset.length > 0) {
+        // Update existing document
+        await pool
+          .request()
+          .input("MemberID", sql.VarChar, memberID)
+          .input("DocName", sql.VarChar, docName)
+          .input("DocPath", sql.VarChar, docPath)
+          .input("ModifyDate", sql.DateTime, new Date()).query(`
+            UPDATE MemberKYC
+            SET
+              DocPath = @DocPath,
+              Status = 'Not Verified',
+              ModifyDate = @ModifyDate
+            WHERE MemberID = @MemberID 
+            AND DocName = @DocName
+          `);
+      } else {
+        // Insert new document
+        await pool
+          .request()
+          .input("MID", sql.BigInt, mid)
+          .input("MemberID", sql.VarChar, memberID)
+          .input("DocName", sql.VarChar, docName)
+          .input("DocPath", sql.VarChar, docPath)
+          .input("Status", sql.VarChar, "Not Verified")
+          .input("ModifyDate", sql.DateTime, new Date()).query(`
+            INSERT INTO MemberKYC
+            (
+              MID,
+              MemberID,
+              DocName,
+              DocPath,
+              Status,
+              ModifyDate
+            )
+            VALUES
+            (
+              @MID,
+              @MemberID,
+              @DocName,
+              @DocPath,
+              @Status,
+              @ModifyDate
+            )
+          `);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: "Documents uploaded successfully.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
