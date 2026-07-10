@@ -6,7 +6,6 @@ import OOPs from "../OOPs.js";
 
 const router = express.Router();
 
-/* ================= PRODUCTS ================= */
 router.get("/products", async (req, res) => {
   try {
     const pool = await poolPromise;
@@ -16,6 +15,36 @@ router.get("/products", async (req, res) => {
        *
       FROM ProductMaster
       WHERE Status = 'Active'
+      ORDER BY MemberMRP;
+    `);
+
+    res.json(
+      result.recordset.map((p) => ({
+        id: p.pID,
+        catId: p.pCatID,
+        name: p.Product,
+        MRP: p.MRP,
+        price: Number(p.MemberMRP || 0),
+        bv: Number(p.BV || 0),
+        gst: Number(p.GST || 0),
+        image: p.Image || "📦",
+      })),
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/products/:catId", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const { catId } = req.params;
+    const result = await pool.request().input("pCatID", sql.Int, catId).query(`
+      SELECT
+       *
+      FROM ProductMaster
+      WHERE Status = 'Active' AND pCatID = @pCatID
       ORDER BY MemberMRP;
     `);
 

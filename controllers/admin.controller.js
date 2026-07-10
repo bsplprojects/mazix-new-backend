@@ -632,6 +632,7 @@ export const getProducts = async (req, res) => {
         p.Repurchase,
         p.BV,
         p.Discount,
+        p.stock,
         c.Category
       FROM ProductMaster p
       INNER JOIN ProductCategory c
@@ -654,10 +655,11 @@ export const getProducts = async (req, res) => {
       Repurchase: row.Repurchase,
       BV: row.BV,
       Discount: row.Discount,
+      stock: row.stock,
       Joining: row.Category,
     }));
 
-    return res.json(list);
+    return res.status(200).json({ success: true, list });
   } catch (error) {
     console.error("GetProductList Error:", error);
 
@@ -776,7 +778,12 @@ export const addCategory = async (req, res) => {
 };
 
 export const addProduct = async (req, res) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+
   try {
+    await transaction.begin();
+
     const {
       pID,
       pCatID,
@@ -792,9 +799,8 @@ export const addProduct = async (req, res) => {
       Repurchase,
       seqOnline,
       Image,
+      stock,
     } = req.body;
-
-    const pool = await poolPromise;
 
     let imageURL = Image || null;
 
@@ -804,9 +810,11 @@ export const addProduct = async (req, res) => {
 
     if (pID && Number(pID) > 0) {
       if (!req.file?.filename && !Image) {
-        const existingProduct = await pool
-          .request()
-          .input("pID", sql.BigInt, pID).query(`
+        const existingProduct = await new sql.Request(transaction).input(
+          "pID",
+          sql.BigInt,
+          pID,
+        ).query(`
             SELECT Image
             FROM ProductMaster
             WHERE pID = @pID
@@ -815,8 +823,7 @@ export const addProduct = async (req, res) => {
         imageURL = existingProduct.recordset[0]?.Image || null;
       }
 
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("pID", sql.BigInt, pID)
         .input("pCatID", sql.BigInt, pCatID)
         .input("Product", sql.NVarChar, Product)
@@ -831,6 +838,7 @@ export const addProduct = async (req, res) => {
         .input("Repurchase", sql.Int, Number(Repurchase) || 0)
         .input("seqOnline", sql.Int, Number(seqOnline) || 0)
         .input("Image", sql.NVarChar, imageURL)
+        .input("stock", sql.Decimal(18, 2), Number(stock) || 0)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           UPDATE ProductMaster
           SET
@@ -847,12 +855,25 @@ export const addProduct = async (req, res) => {
             Repurchase = @Repurchase,
             seqOnline = @seqOnline,
             Image = @Image,
+            stock = @stock,
             ModifyDate = @ModifyDate
           WHERE pID = @pID
         `);
+
+      await new sql.Request(transaction)
+        .input("pID", sql.BigInt, pID)
+        .input("stock", sql.Decimal(18, 2), Number(stock) || 0)
+        .input("Product", sql.NVarChar, Product).query(`
+          UPDATE stockDetail
+          SET
+            Status = 'Updated',
+            stock = @stock,
+            Product = @Product,
+            UpdatedAt = GETDATE()
+          WHERE pID = @pID
+        `);
     } else {
-      await pool
-        .request()
+      const insertResult = await new sql.Request(transaction)
         .input("pCatID", sql.BigInt, pCatID)
         .input("Product", sql.NVarChar, Product)
         .input("Description", sql.NVarChar(sql.MAX), Description)
@@ -860,12 +881,13 @@ export const addProduct = async (req, res) => {
         .input("MemberMRP", sql.Decimal(18, 2), MemberMRP)
         .input("StockistMRP", sql.Decimal(18, 2), StockistMRP)
         .input("GST", sql.Decimal(18, 2), GST)
-        .input("Status", sql.VarChar, Status)
+        .input("Status", sql.VarChar, Status || "Active")
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
         .input("Repurchase", sql.Int, Number(Repurchase) || 0)
         .input("seqOnline", sql.Int, Number(seqOnline) || 0)
         .input("Image", sql.NVarChar, imageURL)
+        .input("stock", sql.Decimal(18, 2), Number(stock) || 0)
         .input("ModifyDate", sql.DateTime, new Date()).query(`
           INSERT INTO ProductMaster
           (
@@ -882,8 +904,10 @@ export const addProduct = async (req, res) => {
             Repurchase,
             seqOnline,
             Image,
+            stock,
             ModifyDate
           )
+          OUTPUT INSERTED.pID
           VALUES
           (
             @pCatID,
@@ -899,10 +923,41 @@ export const addProduct = async (req, res) => {
             @Repurchase,
             @seqOnline,
             @Image,
+            @stock,
             @ModifyDate
           )
         `);
+
+      const newPID = insertResult.recordset[0].pID;
+
+      await new sql.Request(transaction)
+        .input("pID", sql.BigInt, newPID)
+        .input("Product", sql.NVarChar, Product)
+        .input("stock", sql.Decimal(18, 2), stock).query(`
+          INSERT INTO stockDetail
+          (
+            pID,
+            Status,
+            Product,
+            stock,
+            updatedStock,
+            CreatedAt,
+            UpdatedAt
+          )
+          VALUES
+          (
+            @pID,
+            'Created',
+            @Product,
+            @stock,
+            0,
+            GETDATE(),
+            GETDATE()
+          )
+        `);
     }
+
+    await transaction.commit();
 
     const result = await pool.request().query(`
       SELECT
@@ -919,6 +974,14 @@ export const addProduct = async (req, res) => {
       data: result.recordset,
     });
   } catch (error) {
+    if (transaction._aborted !== true) {
+      try {
+        await transaction.rollback();
+      } catch (e) {
+        console.error("Rollback Error:", e);
+      }
+    }
+
     console.error("InsertProduct Error:", error);
 
     return res.status(500).json({

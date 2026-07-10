@@ -852,3 +852,112 @@ export async function getPaidDatesPayout(req, res) {
       .json({ msg: "Internal Server Error", err: error.message });
   }
 }
+
+export async function getGSTReport(req, res) {
+  try {
+    let { FromDate, ToDate, month, page = 1, pageSize = 10 } = req.query;
+
+    page = Number(page);
+    pageSize = Number(pageSize);
+
+    const offset = (page - 1) * pageSize;
+
+    const pool = await poolPromise;
+    const request = pool.request();
+
+    let where = "WHERE 1=1";
+
+    if (FromDate) {
+      request.input("FromDate", sql.Date, FromDate);
+      where += " AND OrderDate >= @FromDate";
+    }
+
+    if (ToDate) {
+      request.input("ToDate", sql.Date, ToDate);
+      where += " AND OrderDate <= @ToDate";
+    }
+
+    if (month) {
+      const [year, monthNumber] = month.split("-");
+
+      request.input("Year", sql.Int, Number(year));
+      request.input("Month", sql.Int, Number(monthNumber));
+
+      where += `
+          AND YEAR(OrderDate) = @Year
+          AND MONTH(OrderDate) = @Month
+      `;
+    }
+
+    const countQuery = `
+      SELECT COUNT(*) AS totalRecords
+      FROM RepProductOrder
+      ${where}
+    `;
+
+    const countResult = await request.query(countQuery);
+    const totalRecords = countResult.recordset[0].totalRecords;
+
+    const dataRequest = pool.request();
+
+    if (FromDate) dataRequest.input("FromDate", sql.Date, FromDate);
+    if (ToDate) dataRequest.input("ToDate", sql.Date, ToDate);
+    if (month) {
+      const [year, monthNumber] = month.split("-");
+
+      dataRequest.input("Year", sql.Int, Number(year));
+      dataRequest.input("Month", sql.Int, Number(monthNumber));
+    }
+
+    const dataQuery = `
+      SELECT *
+      FROM RepProductOrder
+      ${where}
+      ORDER BY OrderDate DESC
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${pageSize} ROWS ONLY
+    `;
+
+    const result = await dataRequest.query(dataQuery);
+
+    // TOtal GST till date and this month and between from date and to date
+    const totalGSTRequest = pool.request();
+
+    if (FromDate) totalGSTRequest.input("FromDate", sql.Date, FromDate);
+    if (ToDate) totalGSTRequest.input("ToDate", sql.Date, ToDate);
+    if (month) {
+      const [year, monthNumber] = month.split("-");
+
+      totalGSTRequest.input("Year", sql.Int, Number(year));
+      totalGSTRequest.input("Month", sql.Int, Number(monthNumber));
+    }
+
+    const totalGSTQuery = `
+      SELECT SUM(TotalGST) AS totalGST
+      FROM RepProductOrder
+      ${where}
+    `;
+
+    const totalGSTResult = await totalGSTRequest.query(totalGSTQuery);
+
+    const totalGST = totalGSTResult.recordset[0].totalGST || 0;
+
+    return res.status(200).json({
+      success: true,
+      msg: "Fetched successfully",
+      page,
+      pageSize,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / pageSize),
+      data: result.recordset,
+      totalGST,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+}

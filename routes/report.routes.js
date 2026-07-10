@@ -15,12 +15,14 @@ import {
   getVerificationList,
   getPaidDatesPayout,
   getRepurchaseWalletTransfer,
+  getGSTReport,
 } from "../controllers/report.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 
 const router = express.Router();
 
 router.route("/sale").get(isAdmin, getSaleReport);
+router.route("/gst").get(isAdmin, getGSTReport);
 router.route("/purchase").get(isAdmin, getPurchaseReport);
 router.route("/pay-transfer").get(isAdmin, getPayTransferReport);
 router.route("/tds").get(isAdmin, getTDSReport);

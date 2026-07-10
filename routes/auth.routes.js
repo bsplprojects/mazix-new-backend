@@ -61,6 +61,8 @@ router.post("/login", async (req, res) => {
     const user = result.recordset[0];
     const decryptedPassword = await OOPs.decrypt(user.Password);
 
+    console.log(decryptedPassword);
+
     if (decryptedPassword.trim() !== Password.trim()) {
       return res.status(401).json({
         success: false,
