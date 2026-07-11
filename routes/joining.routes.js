@@ -66,6 +66,53 @@ router.get("/products/:catId", async (req, res) => {
   }
 });
 
+router.get("/product/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Product ID missing" });
+    }
+
+    const pool = await poolPromise;
+
+    const productDetails = await pool
+      .request()
+      .input("pID", sql.Int, Number(id)).query(`
+      SELECT * FROM ProductMaster where pID = @pID     
+    `);
+
+    const productStock = await pool.request().input("pID", sql.Int, Number(id))
+      .query(`
+      SELECT Status, CreatedAt, UpdatedAt, stock, updatedStock from stockDetail where pID = @pID
+    `);
+
+    const product = productDetails.recordset[0];
+    const stock = productStock.recordset[0];
+
+    const data = {
+      ...product,
+      productStock: {
+        ...stock,
+      },
+    };
+
+    return res.status(200).json({
+      success: true,
+      msg: "Product Fetched successfully",
+      data,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+});
+
 /* ================= WALLET ================= */
 router.get("/member-dashboard", async (req, res) => {
   try {

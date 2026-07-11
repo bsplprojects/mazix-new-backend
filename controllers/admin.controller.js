@@ -1838,3 +1838,251 @@ export const verifyMemberKYCDoc = async (req, res) => {
     });
   }
 };
+
+export const createInvoice = async (req, res) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const headerRequest = new sql.Request(transaction);
+
+    const {
+      memberId,
+      rowItems,
+      customerName,
+      customerEmail,
+      customerPhone,
+      paymentMode,
+      paymentDetails,
+      totalAmount,
+      totalTaxable,
+      totalGst,
+      totalDiscount,
+      paidAmount,
+    } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        msg: "Member ID is required",
+      });
+    }
+
+    if (!rowItems || rowItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        msg: "Items are required",
+      });
+    }
+
+    const headerResponse = await headerRequest
+      .input("memberId", sql.NVarChar, memberId)
+      .input("customerName", sql.NVarChar, customerName)
+      .input("customerEmail", sql.NVarChar, customerEmail)
+      .input("customerPhone", sql.NVarChar, customerPhone)
+      .input("paymentMode", sql.NVarChar, paymentMode)
+      .input("paymentDetails", sql.NVarChar, paymentDetails)
+      .input("totalAmount", sql.Decimal(18, 2), totalAmount)
+      .input("totalGST", sql.Decimal(18, 2), totalGst)
+      .input("totalDiscount", sql.Decimal(18, 2), totalDiscount)
+      .input("totalTaxable", sql.Decimal(18, 2), totalTaxable)
+      .input("paidAmount", sql.Decimal(18, 2), paidAmount)
+      .input("due", sql.Decimal(18, 2), totalAmount - paidAmount).query(`
+        INSERT INTO SaleInvoice (memberId, customerName, customerEmail, customerPhone, paymentMode, paymentDetails, totalAmount, totalGST, totalDiscount, totalTaxable, paidAmount, due) OUTPUT INSERTED.id
+        VALUES (@memberId, @customerName, @customerEmail, @customerPhone, @paymentMode, @paymentDetails, @totalAmount, @totalGST, @totalDiscount, @totalTaxable, @paidAmount, @due)
+      `);
+
+    const invoiceId = headerResponse.recordset[0].id;
+
+    for (const item of rowItems) {
+      const itemRequest = new sql.Request(transaction);
+      const stockRequest = new sql.Request(transaction);
+      await itemRequest
+        .input("invId", sql.NVarChar, invoiceId)
+        .input("pID", sql.BigInt, Number(item.pID))
+        .input("name", sql.NVarChar, item.name)
+        .input("pCatID", sql.NVarChar, item.pCatID)
+        .input("MRP", sql.Decimal(18, 2), item.MRP)
+        .input("MemberMRP", sql.Decimal(18, 2), item.MemberMRP)
+        .input("GST", sql.Decimal(18, 2), item.GST)
+        .input("GSTAmount", sql.Decimal(18, 2), item.GSTAmount)
+        .input("Discount", sql.Decimal(18, 2), item.Discount)
+        .input("discountAmount", sql.Decimal(18, 2), item.discountAmount)
+        .input("taxableAmount", sql.Decimal(18, 2), item.TaxableAmount)
+        .input("amount", sql.Decimal(18, 2), item.Amount)
+        .input("qty", sql.Decimal(18, 2), item.Qty).query(`
+          INSERT INTO SaleItems (invId, pID, name, pCatID, MRP, MemberMRP, GST, GSTAmount, Discount, discountAmount, taxableAmount, amount, qty)
+          
+          VALUES (@invId, @pID, @name, @pCatID, @MRP, @MemberMRP, @GST, @GSTAmount, @Discount, @discountAmount, @taxableAmount, @amount, @qty)`);
+
+      // update the stock of each item in the invoiceItems table
+      await stockRequest
+        .input("pID", sql.BigInt, Number(item.pID))
+        .input("qty", sql.Decimal(18, 2), item.Qty).query(`
+            UPDATE stockDetail
+            SET stock = stock - @qty,
+                UpdatedAt = GETDATE()             
+            WHERE pID = @pID
+          `);
+    }
+
+    await transaction.commit();
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "Invoice created successfully.", invoiceId });
+  } catch (error) {
+    await transaction.rollback();
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong.",
+      error: error.message,
+    });
+  }
+};
+
+export const getInvoiceList = async (req, res) => {
+  try {
+    const { FromDate, ToDate, MemberId, page = 1, pageSize = 10 } = req.query;
+
+    const pageNumber = Number(page);
+    const size = Number(pageSize);
+    const offset = (pageNumber - 1) * size;
+
+    const pool = await poolPromise;
+
+    let whereClause = `WHERE 1 = 1 AND status = 'active'`;
+
+    if (MemberId) {
+      whereClause += ` AND MemberId = @MemberId`;
+    }
+
+    if (FromDate) {
+      whereClause += ` AND date >= @FromDate`;
+    }
+
+    if (ToDate) {
+      whereClause += ` AND date < DATEADD(DAY, 1, @ToDate)`;
+    }
+
+    // Total Count
+    const countRequest = pool.request();
+
+    if (MemberId) countRequest.input("MemberId", sql.NVarChar, MemberId);
+
+    if (FromDate) countRequest.input("FromDate", sql.DateTime, FromDate);
+
+    if (ToDate) countRequest.input("ToDate", sql.DateTime, ToDate);
+
+    const countResult = await countRequest.query(`
+      SELECT COUNT(*) AS total
+      FROM SaleInvoice
+      ${whereClause}
+    `);
+
+    const total = countResult.recordset[0].total;
+
+    const dataRequest = pool.request();
+
+    if (MemberId) dataRequest.input("MemberId", sql.NVarChar, MemberId);
+
+    if (FromDate) dataRequest.input("FromDate", sql.DateTime, FromDate);
+
+    if (ToDate) dataRequest.input("ToDate", sql.DateTime, ToDate);
+
+    dataRequest
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, size);
+
+    const invoiceList = await dataRequest.query(`
+      SELECT *
+      FROM SaleInvoice
+      ${whereClause}
+      ORDER BY date DESC
+      OFFSET @Offset ROWS
+      FETCH NEXT @PageSize ROWS ONLY
+    `);
+
+    return res.status(200).json({
+      success: true,
+      invoiceList: invoiceList.recordset,
+      pagination: {
+        page: pageNumber,
+        pageSize: size,
+        total,
+        totalPages: Math.ceil(total / size),
+        hasNext: pageNumber < Math.ceil(total / size),
+        hasPrev: pageNumber > 1,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+};
+
+export const getInvoice = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    // fetch sale invoice
+    const pool = await poolPromise;
+
+    const invoice = await pool
+      .request()
+      .input("id", sql.BigInt, id)
+      .query(`SELECT * FROM SaleInvoice WHERE id = @id AND status = 'active'`);
+
+    // fetch sale invoice items
+    const invoiceItems = await pool
+      .request()
+      .input("id", sql.BigInt, id)
+      .query(`SELECT * FROM SaleItems WHERE invId = @id`);
+
+    return res.status(200).json({
+      success: true,
+      invoice: invoice.recordset[0],
+      invoiceItems: invoiceItems.recordset,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+};
+
+export const deleteInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invoice ID is required",
+      });
+    }
+
+    const pool = await poolPromise;
+    const cancelledInvoice = await pool.request().input("id", sql.BigInt, id)
+      .query(`
+      UPDATE SaleInvoice SET status = 'cancelled', cancelledAt = GETDATE() WHERE id = @id  
+    `);
+
+    return res.status(200).json({
+      success: true,
+      msg: "Invoice cancelled successfully",
+      cancelledInvoice,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: 500,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+};

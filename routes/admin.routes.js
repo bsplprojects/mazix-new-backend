@@ -30,6 +30,10 @@ import {
   getMemberPayoutDetails,
   changeMemberPassword,
   verifyMemberKYCDoc,
+  createInvoice,
+  getInvoiceList,
+  getInvoice,
+  deleteInvoice,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
@@ -50,6 +54,8 @@ router.route("/pan").get(isAdmin, getPANRecord);
 router.route("/news-feed").get(isAdmin, getNewsFeed);
 router.route("/member-payout-date").get(isAdmin, getMemberPayoutDate);
 router.route("/member-payout-details").get(isAdmin, getMemberPayoutDetails);
+router.route("/sale/invoice").get(isAdmin, getInvoiceList);
+router.route("/invoice/stock").get(isAdmin, getInvoice);
 
 router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);
@@ -64,11 +70,13 @@ router.route("/news/new").post(isAdmin, addNews);
 router.route("/franchise/new").post(isAdmin, addFranchise);
 router.route("/new-password").post(isAdmin, changeMemberPassword);
 router.route("/verify/:id").post(isAdmin, verifyMemberKYCDoc);
+router.route("/invoice/new").post(isAdmin, createInvoice);
 
 router.route("/product/:id").delete(isAdmin, deleteProduct);
 router.route("/category/:id").delete(isAdmin, deleteCategory);
 router.route("/package/:id").delete(isAdmin, deletePackage);
 router.route("/news/:id").delete(isAdmin, deleteNews);
 router.route("/events/:id").delete(isAdmin, deleteEvents);
+router.route("/sale/invoice/:id").delete(isAdmin, deleteInvoice);
 
 export default router;
