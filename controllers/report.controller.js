@@ -961,3 +961,106 @@ export async function getGSTReport(req, res) {
     });
   }
 }
+
+export async function getStockReports(req, res) {
+  try {
+    const {
+      FromDate,
+      ToDate,
+      status = "all",
+      page = 1,
+      pageSize = 10,
+    } = req.query;
+
+    const pageNumber = parseInt(page, 10);
+    const size = parseInt(pageSize, 10);
+    const offset = (pageNumber - 1) * size;
+
+    const pool = await poolPromise;
+
+    let whereClause = "WHERE 1=1";
+
+   
+    if (status && status.toLowerCase() !== "all") {
+      whereClause += " AND LOWER(Status) = LOWER(@Status)";
+    }
+
+    if (FromDate) {
+      whereClause += " AND CreatedAt >= @FromDate";
+    }
+
+    if (ToDate) {
+      whereClause += " AND CreatedAt < DATEADD(DAY, 1, @ToDate)";
+    }
+
+    const countRequest = pool.request();
+
+    if (status && status.toLowerCase() !== "all") {
+      countRequest.input("Status", sql.NVarChar, status);
+    }
+
+    if (FromDate) {
+      countRequest.input("FromDate", sql.DateTime, new Date(FromDate));
+    }
+
+    if (ToDate) {
+      countRequest.input("ToDate", sql.DateTime, new Date(ToDate));
+    }
+
+    const countResult = await countRequest.query(`
+      SELECT COUNT(*) AS total
+      FROM stockDetail
+      ${whereClause}
+    `);
+
+    const total = countResult.recordset[0].total;
+
+    const dataRequest = pool.request();
+
+    if (status && status.toLowerCase() !== "all") {
+      dataRequest.input("Status", sql.NVarChar, status);
+    }
+
+    if (FromDate) {
+      dataRequest.input("FromDate", sql.DateTime, new Date(FromDate));
+    }
+
+    if (ToDate) {
+      dataRequest.input("ToDate", sql.DateTime, new Date(ToDate));
+    }
+
+    dataRequest
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, size);
+
+    const result = await dataRequest.query(`
+      SELECT *
+      FROM stockDetail
+      ${whereClause}
+      ORDER BY CreatedAt DESC
+      OFFSET @Offset ROWS
+      FETCH NEXT @PageSize ROWS ONLY;
+    `);
+
+    return res.status(200).json({
+      success: true,
+      stocksList: result.recordset,
+      pagination: {
+        page: pageNumber,
+        pageSize: size,
+        total,
+        totalPages: Math.ceil(total / size),
+        hasNext: pageNumber < Math.ceil(total / size),
+        hasPrev: pageNumber > 1,
+      },
+    });
+  } catch (error) {
+    console.error("getStockReports Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      error: error.message,
+    });
+  }
+}

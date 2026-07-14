@@ -16,6 +16,7 @@ import {
   getPaidDatesPayout,
   getRepurchaseWalletTransfer,
   getGSTReport,
+  getStockReports,
 } from "../controllers/report.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 
@@ -39,5 +40,6 @@ router.route("/paid-dates").get(isAdmin, getPaidDatesPayout);
 router
   .route("/repurchase-wallet-transfer")
   .get(isAdmin, getRepurchaseWalletTransfer);
+router.route("/stock").get(isAdmin, getStockReports);
 
 export default router;
