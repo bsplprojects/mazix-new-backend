@@ -253,181 +253,113 @@ export async function getPayTransferReport(req, res) {
 
 export async function getRewardReport(req, res) {
   try {
-    const { MemberID, Designation, Fromdate, Todate, all } = req.query;
+    const {
+      MemberID,
+      Designation,
+      Fromdate,
+      Todate,
+      all,
+      page = 1,
+      pageSize = 10,
+    } = req.query;
 
     const pool = await poolPromise;
 
-    let resultData = [];
+    const pageNumber = parseInt(page, 10);
+    const size = parseInt(pageSize, 10);
+    const offset = (pageNumber - 1) * size;
 
-    // 1️⃣ DATE RANGE SETUP
-    let from = null;
-    let to = null;
+    let whereClause = "WHERE 1=1";
 
-    if (Fromdate && Todate) {
-      from = new Date(Fromdate + " 00:00:00");
-      to = new Date(Todate + " 23:59:59");
+    const countRequest = pool.request();
+    const dataRequest = pool.request();
+
+    if (MemberID) {
+      whereClause += " AND mrs.MemberID = @MemberID";
+      countRequest.input("MemberID", sql.VarChar, MemberID);
+      dataRequest.input("MemberID", sql.VarChar, MemberID);
     }
 
-    // 2️⃣ CASE: DESIGNATION FILTER
     if (Designation) {
-      const result = await pool
-        .request()
-        .input("Designation", sql.VarChar, Designation).query(`
-          SELECT *
-          FROM MemberRewardSection
-          WHERE Designation = @Designation
-          ORDER BY ModifyDate DESC
-        `);
-
-      for (const itm of result.recordset) {
-        const member = await pool
-          .request()
-          .input("MemberID", sql.VarChar, itm.MemberID).query(`
-            SELECT MemberName, ContactNo
-            FROM MemberPersonalInfo
-            WHERE MemberID = @MemberID
-          `);
-
-        resultData.push({
-          RewardID: itm.RewardID,
-          MemberID: itm.MemberID,
-          Designation: itm.Designation,
-          RewardName: itm.RewardName,
-          RequiredPV: itm.RequiredPV,
-          RequiredBV: member.recordset[0]?.ContactNo || null,
-          AchievedPV: itm.AchievedPV,
-          AchievedBV: itm.AchievedBV,
-          AchievedPVAmt: itm.AchievedPVAmt,
-          AchievedBVAmt: itm.AchievedBVAmt,
-          Status: itm.Status,
-          Flag: member.recordset[0]?.MemberName || null,
-          ModifyDate: itm.ModifyDate,
-        });
-      }
+      whereClause += " AND mrs.Designation = @Designation";
+      countRequest.input("Designation", sql.VarChar, Designation);
+      dataRequest.input("Designation", sql.VarChar, Designation);
     }
 
-    // 3️⃣ CASE: DATE RANGE ONLY
-    else if (Fromdate && Todate) {
-      const result = await pool.request().query(`
-        SELECT *
-        FROM MemberRewardSection
-        WHERE ModifyDate BETWEEN @from AND @to
-      `);
-
-      const grouped = {};
-
-      for (const row of result.recordset) {
-        if (!grouped[row.MemberID]) {
-          grouped[row.MemberID] = row;
-        }
-      }
-
-      for (const v of Object.values(grouped)) {
-        const member = await pool
-          .request()
-          .input("MemberID", sql.VarChar, v.MemberID).query(`
-            SELECT MemberName, ContactNo
-            FROM MemberPersonalInfo
-            WHERE MemberID = @MemberID
-          `);
-
-        resultData.push({
-          RewardID: v.RewardID,
-          MemberID: v.MemberID,
-          Designation: v.Designation,
-          RewardName: v.RewardName,
-          AchievedBV: v.AchievedBV,
-          AchievedBVAmt: v.AchievedBVAmt,
-          AchievedPV: v.AchievedPV,
-          AchievedPVAmt: v.AchievedPVAmt,
-          Status: v.Status,
-          Flag: member.recordset[0]?.MemberName || null,
-          ModifyDate: v.ModifyDate,
-          RequiredPV: v.RequiredPV,
-          RequiredBV: member.recordset[0]?.ContactNo || null,
-        });
-      }
+    if (Fromdate) {
+      whereClause += " AND mrs.ModifyDate >= @Fromdate";
+      countRequest.input(
+        "Fromdate",
+        sql.DateTime,
+        new Date(`${Fromdate} 00:00:00`),
+      );
+      dataRequest.input(
+        "Fromdate",
+        sql.DateTime,
+        new Date(`${Fromdate} 00:00:00`),
+      );
     }
 
-    // 4️⃣ CASE: MEMBER ID
-    else if (MemberID) {
-      const result = await pool
-        .request()
-        .input("MemberID", sql.VarChar, MemberID).query(`
-          SELECT *
-          FROM MemberRewardSection
-          WHERE MemberID = @MemberID
-          ORDER BY ModifyDate DESC
-        `);
-
-      for (const itm of result.recordset) {
-        const member = await pool
-          .request()
-          .input("MemberID", sql.VarChar, itm.MemberID).query(`
-            SELECT MemberName, ContactNo
-            FROM MemberPersonalInfo
-            WHERE MemberID = @MemberID
-          `);
-
-        resultData.push({
-          RewardID: itm.RewardID,
-          MemberID: itm.MemberID,
-          Designation: itm.Designation,
-          RewardName: itm.RewardName,
-          RequiredPV: itm.RequiredPV,
-          RequiredBV: member.recordset[0]?.ContactNo || null,
-          AchievedPV: itm.AchievedPV,
-          AchievedBV: itm.AchievedBV,
-          AchievedPVAmt: itm.AchievedPVAmt,
-          AchievedBVAmt: itm.AchievedBVAmt,
-          Status: itm.Status,
-          Flag: member.recordset[0]?.ContactNo || null,
-          ModifyDate: itm.ModifyDate,
-        });
-      }
+    if (Todate) {
+      whereClause += " AND mrs.ModifyDate <= @Todate";
+      countRequest.input(
+        "Todate",
+        sql.DateTime,
+        new Date(`${Todate} 23:59:59`),
+      );
+      dataRequest.input("Todate", sql.DateTime, new Date(`${Todate} 23:59:59`));
     }
 
-    // 5️⃣ CASE: ALL DATA
-    else if (all === "All") {
-      const result = await pool.request().query(`
-        SELECT *
-        FROM MemberRewardSection
-        ORDER BY ModifyDate DESC
-      `);
+    const countResult = await countRequest.query(`
+      SELECT COUNT(*) AS total
+      FROM MemberRewardSection mrs
+      ${whereClause}
+    `);
 
-      for (const itm of result.recordset) {
-        const member = await pool
-          .request()
-          .input("MemberID", sql.VarChar, itm.MemberID).query(`
-            SELECT MemberName, ContactNo
-            FROM MemberPersonalInfo
-            WHERE MemberID = @MemberID
-          `);
+    const total = countResult.recordset[0].total;
 
-        resultData.push({
-          RewardID: itm.RewardID,
-          MemberID: itm.MemberID,
-          Designation: itm.Designation,
-          RewardName: itm.RewardName,
-          RequiredPV: itm.RequiredPV,
-          RequiredBV: member.recordset[0]?.ContactNo || null,
-          AchievedPV: itm.AchievedPV,
-          AchievedBV: itm.AchievedBV,
-          AchievedPVAmt: itm.AchievedPVAmt,
-          AchievedBVAmt: itm.AchievedBVAmt,
-          Status: itm.Status,
-          Flag: member.recordset[0]?.ContactNo || null,
-          ModifyDate: itm.ModifyDate,
-        });
-      }
-    }
+    dataRequest
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, size);
+
+    const result = await dataRequest.query(`
+      SELECT
+          mrs.RewardID,
+          mrs.MemberID,
+          mpi.MemberName AS Flag,
+          mpi.ContactNo AS RequiredBV,
+          mrs.Designation,
+          mrs.RewardName,
+          mrs.RequiredPV,
+          mrs.AchievedPV,
+          mrs.AchievedBV,
+          mrs.AchievedPVAmt,
+          mrs.AchievedBVAmt,
+          mrs.Status,
+          mrs.ModifyDate
+      FROM MemberRewardSection mrs
+      LEFT JOIN MemberPersonalInfo mpi
+          ON mpi.MemberID = mrs.MemberID
+      ${whereClause}
+      ORDER BY mrs.ModifyDate DESC
+      OFFSET @Offset ROWS
+      FETCH NEXT @PageSize ROWS ONLY
+    `);
 
     return res.status(200).json({
       success: true,
-      data: resultData,
+      data: result.recordset,
+      pagination: {
+        page: pageNumber,
+        pageSize: size,
+        total,
+        totalPages: Math.ceil(total / size),
+        hasNext: pageNumber < Math.ceil(total / size),
+        hasPrev: pageNumber > 1,
+      },
     });
   } catch (error) {
-    console.error("getRewardHistory Error:", error);
+    console.error("getRewardReport Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -980,7 +912,6 @@ export async function getStockReports(req, res) {
 
     let whereClause = "WHERE 1=1";
 
-   
     if (status && status.toLowerCase() !== "all") {
       whereClause += " AND LOWER(Status) = LOWER(@Status)";
     }
@@ -1034,12 +965,10 @@ export async function getStockReports(req, res) {
       .input("PageSize", sql.Int, size);
 
     const result = await dataRequest.query(`
-      SELECT *
-      FROM stockDetail
+      SELECT sd.*, ISNULL(pm.stock, 0) AS openingStock
+      FROM stockDetail sd LEFT JOIN ProductMaster pm ON sd.pID = pm.pID
       ${whereClause}
       ORDER BY CreatedAt DESC
-      OFFSET @Offset ROWS
-      FETCH NEXT @PageSize ROWS ONLY;
     `);
 
     return res.status(200).json({

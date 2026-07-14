@@ -866,7 +866,7 @@ export const addProduct = async (req, res) => {
         .input("Product", sql.NVarChar, Product).query(`
           UPDATE stockDetail
           SET
-            Status = 'Updated',
+            Status = 'Restocked-by-Admin',
             stock = @stock,
             Product = @Product,
             UpdatedAt = GETDATE()
@@ -2058,31 +2058,139 @@ export const getInvoice = async (req, res) => {
 };
 
 export const deleteInvoice = async (req, res) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+
   try {
+    await transaction.begin();
+
     const { id } = req.params;
+
     if (!id) {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
         message: "Invoice ID is required",
       });
     }
 
-    const pool = await poolPromise;
-    const cancelledInvoice = await pool.request().input("id", sql.BigInt, id)
+    const checkRequest = new sql.Request(transaction);
+    const saleItemsRequest = new sql.Request(transaction);
+    const updateStockRequest = new sql.Request(transaction);
+    const cancelInvoiceRequest = new sql.Request(transaction);
+
+    const existingInvoice = await checkRequest.input("id", sql.BigInt, id)
       .query(`
-      UPDATE SaleInvoice SET status = 'cancelled', cancelledAt = GETDATE() WHERE id = @id  
-    `);
+        SELECT id
+        FROM SaleInvoice
+        WHERE id = @id
+      `);
+
+    if (existingInvoice.recordset.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Invoice not found",
+      });
+    }
+
+    const saleItems = await saleItemsRequest.input(
+      "invId",
+      sql.NVarChar,
+      String(id),
+    ).query(`
+        SELECT *
+        FROM SaleItems
+        WHERE invId = @invId
+      `);
+
+    for (const item of saleItems.recordset) {
+      await new sql.Request(transaction)
+        .input("pID", sql.BigInt, Number(item.pID))
+        .input("qty", sql.Decimal(18, 2), item.qty).query(`
+          UPDATE stockDetail
+          SET stock = stock + @qty,
+           Status = 'restocked-by-cancelling-invoice',
+           UpdatedAt = GETDATE()
+          WHERE pID = @pID
+        `);
+    }
+
+    await cancelInvoiceRequest.input("id", sql.BigInt, id).query(`
+        UPDATE SaleInvoice
+        SET
+          status = 'cancelled',
+          cancelledAt = GETDATE()
+        WHERE id = @id
+      `);
+
+    await transaction.commit();
 
     return res.status(200).json({
       success: true,
       msg: "Invoice cancelled successfully",
-      cancelledInvoice,
     });
   } catch (error) {
+    if (transaction._aborted !== true) {
+      await transaction.rollback();
+    }
+
     return res.status(500).json({
-      success: 500,
+      success: false,
       msg: "Internal Server Error",
       err: error.message,
+    });
+  }
+};
+
+export const createReward = async (req, res) => {
+  try {
+    const rewards = req.body.ids;
+
+    if (!Array.isArray(rewards) || rewards.length === 0) {
+      return res.status(200).json({
+        success: true,
+        updatedCount: 0,
+      });
+    }
+
+    const pool = await poolPromise;
+
+    const transaction = new sql.Transaction(pool);
+
+    await transaction.begin();
+
+    try {
+      let updatedCount = 0;
+
+      for (const reward of rewards) {
+        const result = await transaction
+          .request()
+          .input("RewardID", sql.Int, reward).query(`
+            UPDATE MemberRewardSection
+            SET Status = 'Achieved-Paid'
+            WHERE MemberID = @MemberID
+          `);
+
+        updatedCount += result.rowsAffected[0];
+      }
+
+      await transaction.commit();
+
+      return res.status(200).json({
+        success: true,
+        updatedCount,
+      });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error) {
+    console.error("paidRewardAmount Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

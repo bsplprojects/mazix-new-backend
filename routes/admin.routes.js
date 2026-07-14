@@ -34,6 +34,7 @@ import {
   getInvoiceList,
   getInvoice,
   deleteInvoice,
+  createReward,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
@@ -71,6 +72,7 @@ router.route("/franchise/new").post(isAdmin, addFranchise);
 router.route("/new-password").post(isAdmin, changeMemberPassword);
 router.route("/verify/:id").post(isAdmin, verifyMemberKYCDoc);
 router.route("/invoice/new").post(isAdmin, createInvoice);
+router.route("/reward/paid").post(isAdmin, createReward);
 
 router.route("/product/:id").delete(isAdmin, deleteProduct);
 router.route("/category/:id").delete(isAdmin, deleteCategory);

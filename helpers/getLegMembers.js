@@ -88,14 +88,16 @@ export async function getLegMembers(
   `);
 
     members.push(...downline.recordset);
-    // console.log(members);
-
     queue.push(...downline.recordset.map((x) => x.MemberID));
   }
 
   members = members.slice(0, limit);
 
+  // count total joining BV
+  const totalBV = members.reduce((acc, m) => acc + Number(m.BV || 0), 0);
+
   return {
+    totalBV,
     members: members.map((m) => ({
       id: m.MemberID,
       name: m.MemberName,

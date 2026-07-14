@@ -203,14 +203,13 @@ router.get("/:leg/:userId", async (req, res) => {
 
     const search = (req.query.search || "").trim();
 
-    // cursor from previous request
     let queue = req.query.queue
       ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
       : [];
 
     const data = await getLegMembers(userId, leg, queue, limit, search);
 
-    res.json(data);
+    res.status(200).json(data);
   } catch (err) {
     console.error(err);
     res.status(500).json({
@@ -265,6 +264,5 @@ router.get("/:leg/:userId/stats", async (req, res) => {
 });
 
 router.get("/bv", getTeamBV);
-
 
 export default router;
