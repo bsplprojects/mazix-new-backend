@@ -52,7 +52,6 @@ router.route("/reward/:MemberID").get(getMemberReward);
  *                   type: object
  */
 router.route("/:mid").get(getMemberDetail);
-router.route("/:mid").patch(updateMemberDetail);
 router.route("/invoice-joining/:id").get(getInvoiceAtJoining);
 router.route("/nominee/:mid").get(getNomineeInfo);
 router.route("/bank/:mid").get(getBankInfo);
@@ -72,6 +71,7 @@ router.route("/kyc/docs").post(
   uploadUserKYCDocs,
 );
 
+router.route("/:mid").patch(updateMemberDetail);
 router.route("/personalinfo/:id").patch(updatePersonalInfo);
 router.route("/nomineeinfo/:id").patch(updateNomineeInfo);
 router.route("/bankinfo/:id").patch(updateBankInfo);

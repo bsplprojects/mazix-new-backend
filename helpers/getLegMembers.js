@@ -96,6 +96,38 @@ export async function getLegMembers(
   // count total joining BV
   const totalBV = members.reduce((acc, m) => acc + Number(m.BV || 0), 0);
 
+  // count total Repurchase BV
+  const memberIds = members.map((m) => m.MemberID);
+  if (memberIds.length) {
+    const request = pool.request();
+
+    memberIds.forEach((id, index) => {
+      request.input(`id${index}`, sql.NVarChar, id);
+    });
+
+    const ids = memberIds.map((_, i) => `@id${i}`).join(",");
+
+    const repurchase = await request.query(`
+      SELECT
+          MemberID,
+          SUM(TotalBV) AS TotalRepBV
+      FROM RepProductOrder
+      WHERE MemberID IN (${ids})
+      GROUP BY MemberID
+  `);
+
+    const repurchaseMap = {};
+
+    repurchase.recordset.forEach((row) => {
+      repurchaseMap[row.MemberID] = Number(row.TotalRepBV || 0);
+    });
+
+    members = members.map((member) => ({
+      ...member,
+      repurchaseBV: repurchaseMap[member.MemberID] || 0,
+    }));
+  }
+
   return {
     totalBV,
     members: members.map((m) => ({
@@ -105,6 +137,7 @@ export async function getLegMembers(
       joinDate: m.DOJ,
       leg: m.Leaf,
       bv: Number(m.BV || 0),
+      repurchaseBV: m.repurchaseBV,
       active: Number(m.BV || 0) > 0,
       rank: m.Designation,
     })),

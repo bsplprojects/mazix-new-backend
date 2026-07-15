@@ -35,6 +35,7 @@ import {
   getInvoice,
   deleteInvoice,
   createReward,
+  getOTP,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
@@ -57,6 +58,7 @@ router.route("/member-payout-date").get(isAdmin, getMemberPayoutDate);
 router.route("/member-payout-details").get(isAdmin, getMemberPayoutDetails);
 router.route("/sale/invoice").get(isAdmin, getInvoiceList);
 router.route("/invoice/stock").get(isAdmin, getInvoice);
+router.route("/member/otp").get(isAdmin, getOTP);
 
 router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);

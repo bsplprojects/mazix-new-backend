@@ -2,6 +2,8 @@ import sql from "mssql";
 import { poolPromise } from "../db.js";
 import OOPs from "../OOPs.js";
 import jwt from "jsonwebtoken";
+import { generateOTP } from "../utils/generateOTP.js";
+import { sendMail } from "../utils/sendMail.js";
 
 export const adminLogin = async (req, res) => {
   try {
@@ -16,11 +18,9 @@ export const adminLogin = async (req, res) => {
 
     const pool = await poolPromise;
 
-    const encPassword = await OOPs.encrypt(Password);
     const result = await pool
       .request()
-      .input("MemberID", sql.NVarChar, MemberID)
-      .input("Password", sql.NVarChar, encPassword).query(`
+      .input("MemberID", sql.NVarChar, MemberID).query(`
         SELECT TOP 1
           LoginID,
           MID,
@@ -37,7 +37,17 @@ export const adminLogin = async (req, res) => {
     if (result.recordset.length === 0) {
       return res.status(401).json({
         success: false,
-        message: "Invalid MemberID or Password",
+        message: "Invalid Username or Password",
+      });
+    }
+
+    const adminPassword = result.recordset[0].Password;
+    const decryptedPassword = await OOPs.decrypt(adminPassword);
+
+    if (decryptedPassword !== Password) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Username or Password",
       });
     }
 
@@ -2191,6 +2201,79 @@ export const createReward = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+export const getOTP = async (req, res) => {
+  try {
+    const otp = generateOTP();
+    const companyName = "Mazix";
+    const subject = `OTP of ${companyName}`;
+
+    const mailOTP = `
+        <p>Hello, Admin!</p>
+        <p>We have sent an OTP for Edit Member Profile. Your OTP is:</p>
+        <h1 style="text-align:center;">${otp}</h1>
+        <p>Please use this OTP to authorize your request.</p>
+        <p>If you did not make this request, please ignore this email.</p>
+        <p>Best,<br>Your ${companyName}</p>
+    `;
+
+    const receiverName = "Mazix Admin";
+    const receiverEmail = "rkrajpragati6@gmail.com";
+
+    // Send Email
+    const mailResponse = await sendMail({
+      to: receiverEmail,
+      subject,
+      html: mailOTP,
+      name: receiverName,
+    });
+
+    if (!mailResponse.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP.",
+        error: mailResponse.error,
+      });
+    }
+
+    const pool = await poolPromise;
+
+    await pool
+      .request()
+      .input("MobileNo", sql.NVarChar, receiverEmail)
+      .input("OTP", sql.NVarChar, otp)
+      .input("ExpireMinute", sql.Int, 5).query(`
+            INSERT INTO OTPMaster
+            (
+                MobileNo,
+                OTP,
+                ExpireMinute,
+                ExpireTime,
+                ModifyDate
+            )
+            VALUES
+            (
+                @MobileNo,
+                @OTP,
+                @ExpireMinute,
+                DATEADD(MINUTE, @ExpireMinute, GETDATE()),
+                GETDATE()
+            )
+        `);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully.",
+    });
+  } catch (err) {
+    console.error("Send OTP Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send OTP.",
+      error: err.message,
     });
   }
 };

@@ -452,7 +452,24 @@ export const updateMemberDetail = async (req, res) => {
   try {
     await transaction.begin();
 
-    // IMPORTANT: create separate request per query OR reset inputs carefully
+    const otpRequest = new sql.Request(transaction);
+
+    const otpExists = await otpRequest.input("OTP", sql.NVarChar, req.body.OTP)
+      .query(`
+      SELECT TOP 1 *
+      FROM OTPMaster
+      WHERE OTP = @OTP AND ExpireTime >= GETDATE()
+      ORDER BY OTPId DESC
+    `);
+
+    if (!otpExists.recordset.length) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP or Expired",
+      });
+    }
+
     const checkRequest = new sql.Request(transaction);
 
     const userExists = await checkRequest.input("MID", sql.BigInt, mid).query(`
