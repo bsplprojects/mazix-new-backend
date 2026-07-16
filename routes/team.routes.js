@@ -195,15 +195,15 @@ router.get("/payout-statement/:id", async (req, res) => {
 
 router.get("/datewise/:id", getDatewiseDownline);
 
-router.get("/:leg/:userId", async (req, res) => {
+router.post("/:leg/:userId", async (req, res) => {
   try {
     const { userId, leg } = req.params;
 
     const limit = Number(req.query.limit || 10);
 
-    const search = (req.query.search || "").trim();
+    const search = (req.body.search || "").trim();
 
-    let queue = req.query.queue
+    let queue = req.body.queue
       ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
       : [];
 
