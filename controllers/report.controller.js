@@ -4,7 +4,7 @@ import { getProductSaleWithJoin } from "../helpers/getSaleProduct.js";
 
 export async function getSaleReport(req, res) {
   try {
-    const { FromDate, MemberId, Todate } = req.query;
+    const { FromDate, MemberId, Todate, page = 1, pageSize = 10 } = req.query;
 
     const pool = await poolPromise;
 
