@@ -902,6 +902,7 @@ export async function getStockReports(req, res) {
       status = "all",
       page = 1,
       pageSize = 10,
+      search,
     } = req.query;
 
     const pageNumber = parseInt(page, 10);
@@ -924,6 +925,14 @@ export async function getStockReports(req, res) {
       whereClause += " AND CreatedAt < DATEADD(DAY, 1, @ToDate)";
     }
 
+    if (search) {
+      whereClause += `
+          AND (
+            sd.Product LIKE @Search
+          )
+      `;
+    }
+
     const countRequest = pool.request();
 
     if (status && status.toLowerCase() !== "all") {
@@ -938,9 +947,14 @@ export async function getStockReports(req, res) {
       countRequest.input("ToDate", sql.DateTime, new Date(ToDate));
     }
 
+    if (search) {
+      countRequest.input("Search", sql.NVarChar, `%${search}%`);
+    }
+
     const countResult = await countRequest.query(`
       SELECT COUNT(*) AS total
-      FROM stockDetail
+        FROM stockDetail sd
+        LEFT JOIN ProductMaster pm ON sd.pID = pm.pID
       ${whereClause}
     `);
 
@@ -960,6 +974,10 @@ export async function getStockReports(req, res) {
       dataRequest.input("ToDate", sql.DateTime, new Date(ToDate));
     }
 
+    if (search) {
+      dataRequest.input("Search", sql.NVarChar, `%${search}%`);
+    }
+
     dataRequest
       .input("Offset", sql.Int, offset)
       .input("PageSize", sql.Int, size);
@@ -969,6 +987,8 @@ export async function getStockReports(req, res) {
       FROM stockDetail sd LEFT JOIN ProductMaster pm ON sd.pID = pm.pID
       ${whereClause}
       ORDER BY CreatedAt DESC
+      OFFSET @Offset ROWS
+      FETCH NEXT @PageSize ROWS ONLY
     `);
 
     return res.status(200).json({

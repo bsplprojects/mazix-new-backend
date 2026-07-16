@@ -624,9 +624,18 @@ export const getEventsHistory = async (req, res) => {
 
 export const getProducts = async (req, res) => {
   try {
-    const pool = await poolPromise;
+    const { page = 1, pageSize = 10, search } = req.query;
+    const pageNumber = Number(page);
+    const pageSizeNumber = Number(pageSize);
 
-    const result = await pool.request().query(`
+    const offset = (pageNumber - 1) * pageSizeNumber;
+
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input("offset", sql.Int, offset)
+      .input("pageSize", sql.Int, pageSizeNumber)
+      .input("search", sql.VarChar, `%${search}%`).query(`
       SELECT
         p.pID,
         p.pCatID,
@@ -647,8 +656,18 @@ export const getProducts = async (req, res) => {
       FROM ProductMaster p
       INNER JOIN ProductCategory c
         ON p.pCatID = c.pCatID
+      WHERE LOWER(p.Product) LIKE @search
       ORDER BY c.Category
+      OFFSET @offset ROWS
+      FETCH NEXT @pageSize ROWS ONLY
     `);
+
+    // count request
+    const total = await pool.request().query(`
+      SELECT COUNT(*) as total FROM ProductMaster
+    `);
+
+    const count = total.recordset[0].total;
 
     const list = result.recordset.map((row) => ({
       pID: row.pID,
@@ -669,7 +688,18 @@ export const getProducts = async (req, res) => {
       Joining: row.Category,
     }));
 
-    return res.status(200).json({ success: true, list });
+    return res.status(200).json({
+      success: true,
+      list,
+      pagination: {
+        page: pageNumber,
+        pageSize: pageSizeNumber,
+        total: count,
+        totalPages: Math.ceil(count / pageSizeNumber),
+        hasNext: pageNumber < Math.ceil(count / pageSizeNumber),
+        hasPrev: pageNumber > 1,
+      },
+    });
   } catch (error) {
     console.error("GetProductList Error:", error);
 
