@@ -219,6 +219,8 @@ router.post("/:leg/:userId", async (req, res) => {
   }
 });
 
+
+// DUPLICATE API
 // router.post("/:leg/:userId", async (req, res) => {
 //   try {
 //     const { userId, leg } = req.params;

@@ -1754,7 +1754,6 @@ export const getMemberPayoutDetails = async (req, res) => {
 
     const pool = await poolPromise;
 
-    // Call Stored Procedure
     const payoutResult = await pool
       .request()
       .input("fromDate", dateList)
@@ -1766,7 +1765,6 @@ export const getMemberPayoutDetails = async (req, res) => {
     const response = [];
 
     for (const item of payouts) {
-      // Fetch Bank Details
       const bankResult = await pool.request().input("MID", item.MID).query(`
             SELECT TOP 1
                 AcName,
@@ -2304,6 +2302,176 @@ export const getOTP = async (req, res) => {
       success: false,
       message: "Failed to send OTP.",
       error: err.message,
+    });
+  }
+};
+
+export const createPaymentTransfer = async (req, res) => {
+  let transaction;
+
+  try {
+    const payouts = req.body.ids;
+    const loginID = req.user?.MID || req.session?.MID || 0;
+
+    if (!Array.isArray(payouts) || payouts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide member id's",
+      });
+    }
+
+    const pool = await poolPromise;
+    transaction = new sql.Transaction(pool);
+
+    await transaction.begin();
+
+    let id = 0;
+
+    for (const item of payouts) {
+      const payout = await new sql.Request(transaction).input(
+        "BinaryPayoutID",
+        sql.Int,
+        Number(item.BinaryPayoutID),
+      ).query(`
+            SELECT *
+            FROM PayoutBinary
+            WHERE BinaryPayoutID = @BinaryPayoutID
+        `);
+
+      if (payout.recordset.length === 0) continue;
+
+      const obj = payout.recordset[0];
+
+      const insertResult = await new sql.Request(transaction)
+        .input("BinaryPayoutID", sql.Int, obj.BinaryPayoutID)
+        .input("MemberID", sql.VarChar, obj.MemberID)
+        .input("CurrentLeft", sql.Decimal(18, 2), obj.CurrentLeft)
+        .input("CurrentRight", sql.Decimal(18, 2), obj.CurrentRight)
+        .input("PurCurrentLeft", sql.Decimal(18, 2), obj.PurCurrentLeft)
+        .input("PurCurrentRight", sql.Decimal(18, 2), obj.PurCurrentRight)
+        .input("OldLeftCarry", sql.Decimal(18, 2), obj.OldLeftCarry)
+        .input("OldRightCarry", sql.Decimal(18, 2), obj.OldRightCarry)
+        .input("TotalLeft", sql.Decimal(18, 2), obj.TotalLeft)
+        .input("TotalRight", sql.Decimal(18, 2), obj.TotalRight)
+        .input("Pair", sql.Decimal(18, 2), obj.Pair)
+        .input("Capping", sql.Decimal(18, 2), obj.Capping)
+        .input("CarryLeft", sql.Decimal(18, 2), obj.CarryLeft)
+        .input("CarryRight", sql.Decimal(18, 2), obj.CarryRight)
+        .input("Amount", sql.Decimal(18, 2), obj.Amount)
+        .input("TDS", sql.Decimal(18, 2), obj.TDS)
+        .input("AdminCharge", sql.Decimal(18, 2), obj.AdminCharge)
+        .input("Vouchur", sql.VarChar, obj.Vouchur)
+        .input("Payable", sql.Decimal(18, 2), obj.Payable)
+        .input("PayoutDate", sql.DateTime, obj.PayoutDate)
+        .input("PayoutFromDate", sql.DateTime, obj.PayoutFromDate)
+        .input("PayoutToDate", sql.DateTime, obj.PayoutToDate)
+        .input("Status", sql.VarChar, obj.Status)
+        .input("Flag", sql.VarChar, obj.Flag)
+        .input("ModifyDate", sql.DateTime, new Date())
+        .input("PaymentStatus", sql.VarChar, "Done")
+        .input("PaymentDate", sql.DateTime, new Date())
+        .input("LoginID", sql.BigInt, loginID)
+        .input("Bonus", sql.Decimal(18, 2), obj.Bonus).query(`
+            INSERT INTO MemberPaymentTransfer
+            (
+                BinaryPayoutID,
+                MemberID,
+                CurrentLeft,
+                CurrentRight,
+                PurCurrentLeft,
+                PurCurrentRight,
+                OldLeftCarry,
+                OldRightCarry,
+                TotalLeft,
+                TotalRight,
+                Pair,
+                Capping,
+                CarryLeft,
+                CarryRight,
+                Amount,
+                TDS,
+                AdminCharge,
+                Vouchur,
+                Payable,
+                PayoutDate,
+                PayoutFromDate,
+                PayoutToDate,
+                Status,
+                Flag,
+                ModifyDate,
+                PaymentStatus,
+                PaymentDate,
+                LoginID,
+                Bonus
+            )
+            VALUES
+            (
+                @BinaryPayoutID,
+                @MemberID,
+                @CurrentLeft,
+                @CurrentRight,
+                @PurCurrentLeft,
+                @PurCurrentRight,
+                @OldLeftCarry,
+                @OldRightCarry,
+                @TotalLeft,
+                @TotalRight,
+                @Pair,
+                @Capping,
+                @CarryLeft,
+                @CarryRight,
+                @Amount,
+                @TDS,
+                @AdminCharge,
+                @Vouchur,
+                @Payable,
+                @PayoutDate,
+                @PayoutFromDate,
+                @PayoutToDate,
+                @Status,
+                @Flag,
+                @ModifyDate,
+                @PaymentStatus,
+                @PaymentDate,
+                @LoginID,
+                @Bonus
+            );
+
+            SELECT SCOPE_IDENTITY() AS MemPayTransID;
+        `);
+
+      const memPayTransID = insertResult.recordset[0]?.MemPayTransID;
+
+      if (memPayTransID) {
+        await new sql.Request(transaction).input(
+          "BinaryPayoutID",
+          sql.Int,
+          obj.BinaryPayoutID,
+        ).query(`
+              UPDATE PayoutBinary
+              SET Status='Deactive'
+              WHERE BinaryPayoutID=@BinaryPayoutID
+          `);
+
+        id = 1;
+      }
+    }
+
+    await transaction.commit();
+
+    return res.status(200).json(id);
+  } catch (err) {
+    if (transaction) {
+      try {
+        await transaction.rollback();
+      } catch {}
+    }
+
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
