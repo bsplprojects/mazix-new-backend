@@ -258,16 +258,17 @@ export async function getRewardReport(req, res) {
       Designation,
       Fromdate,
       Todate,
-      all,
       page = 1,
       pageSize = 10,
     } = req.query;
 
     const pool = await poolPromise;
 
+    const isAll = pageSize === "all";
+
     const pageNumber = parseInt(page, 10);
-    const size = parseInt(pageSize, 10);
-    const offset = (pageNumber - 1) * size;
+    const size = isAll ? null : parseInt(pageSize, 10);
+    const offset = isAll ? 0 : (pageNumber - 1) * size;
 
     let whereClause = "WHERE 1=1";
 
@@ -288,26 +289,20 @@ export async function getRewardReport(req, res) {
 
     if (Fromdate) {
       whereClause += " AND mrs.ModifyDate >= @Fromdate";
-      countRequest.input(
-        "Fromdate",
-        sql.DateTime,
-        new Date(`${Fromdate} 00:00:00`),
-      );
-      dataRequest.input(
-        "Fromdate",
-        sql.DateTime,
-        new Date(`${Fromdate} 00:00:00`),
-      );
+
+      const from = new Date(`${Fromdate} 00:00:00`);
+
+      countRequest.input("Fromdate", sql.DateTime, from);
+      dataRequest.input("Fromdate", sql.DateTime, from);
     }
 
     if (Todate) {
       whereClause += " AND mrs.ModifyDate <= @Todate";
-      countRequest.input(
-        "Todate",
-        sql.DateTime,
-        new Date(`${Todate} 23:59:59`),
-      );
-      dataRequest.input("Todate", sql.DateTime, new Date(`${Todate} 23:59:59`));
+
+      const to = new Date(`${Todate} 23:59:59`);
+
+      countRequest.input("Todate", sql.DateTime, to);
+      dataRequest.input("Todate", sql.DateTime, to);
     }
 
     const countResult = await countRequest.query(`
@@ -318,9 +313,18 @@ export async function getRewardReport(req, res) {
 
     const total = countResult.recordset[0].total;
 
-    dataRequest
-      .input("Offset", sql.Int, offset)
-      .input("PageSize", sql.Int, size);
+    if (!isAll) {
+      dataRequest
+        .input("Offset", sql.Int, offset)
+        .input("PageSize", sql.Int, size);
+    }
+
+    const paginationQuery = isAll
+      ? ""
+      : `
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY
+      `;
 
     const result = await dataRequest.query(`
       SELECT
@@ -342,21 +346,22 @@ export async function getRewardReport(req, res) {
           ON mpi.MemberID = mrs.MemberID
       ${whereClause}
       ORDER BY mrs.ModifyDate DESC
-      OFFSET @Offset ROWS
-      FETCH NEXT @PageSize ROWS ONLY
+      ${paginationQuery}
     `);
 
     return res.status(200).json({
       success: true,
       data: result.recordset,
-      pagination: {
-        page: pageNumber,
-        pageSize: size,
-        total,
-        totalPages: Math.ceil(total / size),
-        hasNext: pageNumber < Math.ceil(total / size),
-        hasPrev: pageNumber > 1,
-      },
+      pagination: isAll
+        ? null
+        : {
+            page: pageNumber,
+            pageSize: size,
+            total,
+            totalPages: Math.ceil(total / size),
+            hasNext: pageNumber < Math.ceil(total / size),
+            hasPrev: pageNumber > 1,
+          },
     });
   } catch (error) {
     console.error("getRewardReport Error:", error);

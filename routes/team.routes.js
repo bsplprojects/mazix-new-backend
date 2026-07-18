@@ -199,12 +199,12 @@ router.post("/:leg/:userId", async (req, res) => {
   try {
     const { userId, leg } = req.params;
 
-    const limit = Number(req.query.limit || 10);
+    const limit = Number(req.body.limit || 100);
 
     const search = (req.body.search || "").trim();
 
     let queue = req.body.queue
-      ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
+      ? JSON.parse(Buffer.from(req.body.queue, "base64").toString())
       : [];
 
     const data = await getLegMembers(userId, leg, queue, limit, search);
@@ -219,49 +219,50 @@ router.post("/:leg/:userId", async (req, res) => {
   }
 });
 
-router.get("/:leg/:userId", async (req, res) => {
-  try {
-    const { userId, leg } = req.params;
+// router.post("/:leg/:userId", async (req, res) => {
+//   try {
+//     const { userId, leg } = req.params;
 
-    const limit = Number(req.query.limit || 10);
+//     const limit = Number(req.body.limit || 10);
 
-    const search = (req.query.search || "").trim();
+//     const search = (req.body.search || "").trim();
 
-    // cursor from previous request
-    let queue = req.query.queue
-      ? JSON.parse(Buffer.from(req.query.queue, "base64").toString())
-      : [];
+//     // cursor from previous request
+//     let queue = req.body.queue
+//       ? JSON.parse(Buffer.from(req.body.queue, "base64").toString())
+//       : [];
 
-    const data = await getLegMembers(userId, leg, queue, limit, search);
+//     const data = await getLegMembers(userId, leg, queue, limit, search);
 
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
+//     res.json(data);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       success: false,
+//       error: err.message,
+//     });
+//   }
+// });
 
-router.get("/:leg/:userId/stats", async (req, res) => {
-  try {
-    const { userId, leg } = req.params;
+// CURRENTLY NOT IN USE
+// router.get("/:leg/:userId/stats", async (req, res) => {
+//   try {
+//     const { userId, leg } = req.params;
 
-    const stats = await getLegStats(userId, leg);
+//     const stats = await getLegStats(userId, leg);
 
-    res.json({
-      success: true,
-      stats,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       stats,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       success: false,
+//       error: err.message,
+//     });
+//   }
+// });
 
 router.get("/bv", getTeamBV);
 

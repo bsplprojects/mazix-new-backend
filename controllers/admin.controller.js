@@ -2206,9 +2206,9 @@ export const createReward = async (req, res) => {
       for (const reward of rewards) {
         const result = await transaction
           .request()
-          .input("RewardID", sql.Int, reward).query(`
+          .input("MemberID", sql.NVarChar, reward).query(`
             UPDATE MemberRewardSection
-            SET Status = 'Achieved-Paid'
+            SET Status = 'Achieved-Paid', ModifyDate = GETDATE()
             WHERE MemberID = @MemberID
           `);
 

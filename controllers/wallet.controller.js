@@ -19,7 +19,8 @@ export const getMemberWallet = async (req, res) => {
       .input("memberID", sql.VarChar, memberID)
       .execute("Get_MainWallet");
 
-    const walletAmount = result.recordset?.[0]?.Value || 0;
+    const walletObject = result.recordset?.[0];
+    const walletAmount = Object.values(walletObject || {})[0] || 0;
 
     const response = [
       {
@@ -78,7 +79,8 @@ export const getWalletSendHistory = async (req, res) => {
 };
 
 export const transferMainWallet = async (req, res) => {
-  const transaction = new sql.Transaction();
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
 
   try {
     const { FromMemberID, ToMemberID, TransferWallet, MainWallet } = req.body;
@@ -93,8 +95,6 @@ export const transferMainWallet = async (req, res) => {
         Message: "From or To MemberID,Wallet Not Valid",
       });
     }
-
-    const pool = await poolPromise;
 
     const fromMember = await pool
       .request()
@@ -118,14 +118,7 @@ export const transferMainWallet = async (req, res) => {
       });
     }
 
-    const walletResult = await pool
-      .request()
-      .input("MemberID", sql.VarChar, FromMemberID)
-      .execute("Get_MainWallet");
-
-    const currentWallet = Number(walletResult.recordset?.[0]?.Value || 0);
-
-    if (TransferWallet > currentWallet) {
+    if (TransferWallet > MainWallet) {
       return res.status(400).json({
         Message: "Insufficient Wallet Balance",
       });
@@ -220,19 +213,16 @@ export const transferMainWallet = async (req, res) => {
       .input("MemberID", sql.VarChar, FromMemberID)
       .execute("Get_MainWallet");
 
+    const walletObject = updatedWallet.recordset?.[0];
+    const walletAmount = Object.values(walletObject || {})[0] || 0;
+
     return res.status(200).json({
-      Amount: updatedWallet.recordset?.[0]?.Value || 0,
+      Amount: walletAmount,
       Message: "Wallet Transfered Successfully",
     });
   } catch (error) {
-    if (transaction._aborted === false) {
-      try {
-        await transaction.rollback();
-      } catch {}
-    }
-
+    await transaction.rollback();
     console.error(error);
-
     return res.status(500).json({
       Message: error.message,
     });
@@ -257,7 +247,8 @@ export const getRepurchaseMemberWallet = async (req, res) => {
       .input("MemberID", sql.VarChar, memberID)
       .execute("Get_RepMainWallet");
 
-    const walletAmount = result.recordset?.[0]?.Value || 0;
+    const walletObject = result.recordset?.[0] || {};
+    const walletAmount = Object.values(walletObject || {})[0] || 0;
 
     const response = [
       {
@@ -317,7 +308,8 @@ export const getRepurchaseMemberWalletHistory = async (req, res) => {
 };
 
 export const repTransferMainWallet = async (req, res) => {
-  const transaction = new sql.Transaction();
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
 
   try {
     const { FromMemberID, ToMemberID, TransferWallet, MainWallet } = req.body;
@@ -329,17 +321,15 @@ export const repTransferMainWallet = async (req, res) => {
       TransferWallet <= 0
     ) {
       return res.status(400).json({
-        Message: "From or To MemberID,Wallet Not Valid",
+        Message: "Please provide valid member IDs",
       });
     }
-
-    const pool = await poolPromise;
 
     const fromMember = await pool
       .request()
       .input("MemberID", sql.VarChar, FromMemberID).query(`
         SELECT TOP 1 *
-        FROM MemberEnrollments
+        FROM MemberEnrollment
         WHERE MemberID = @MemberID
       `);
 
@@ -347,13 +337,13 @@ export const repTransferMainWallet = async (req, res) => {
       .request()
       .input("MemberID", sql.VarChar, ToMemberID).query(`
         SELECT TOP 1 *
-        FROM MemberEnrollments
+        FROM MemberEnrollment
         WHERE MemberID = @MemberID
       `);
 
     if (fromMember.recordset.length === 0 || toMember.recordset.length === 0) {
       return res.status(400).json({
-        Message: "From or To MemberID,Wallet Not Valid",
+        Message: "Please provide valid member IDs",
       });
     }
 
@@ -370,7 +360,7 @@ export const repTransferMainWallet = async (req, res) => {
       .input("Flag", sql.VarChar, "Send")
       .input("WalletType", sql.VarChar, "Wallet")
       .input("ModifyDate", sql.DateTime, new Date()).query(`
-        INSERT INTO RepurchaseWalletTransfers
+        INSERT INTO RepurchaseWalletTransfer
         (
           MID,
           MemberID,
@@ -409,7 +399,7 @@ export const repTransferMainWallet = async (req, res) => {
       .input("Flag", sql.VarChar, "Received")
       .input("WalletType", sql.VarChar, "Wallet")
       .input("ModifyDate", sql.DateTime, new Date()).query(`
-        INSERT INTO RepurchaseWalletTransfers
+        INSERT INTO RepurchaseWalletTransfer
         (
           MID,
           MemberID,

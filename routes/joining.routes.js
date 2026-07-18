@@ -113,7 +113,6 @@ router.get("/product/:id", async (req, res) => {
   }
 });
 
-/* ================= WALLET ================= */
 router.get("/member-dashboard", async (req, res) => {
   try {
     const pool = await poolPromise;
@@ -156,7 +155,6 @@ router.get("/member-dashboard", async (req, res) => {
   }
 });
 
-/* ================= REGISTER JOINING ================= */
 router.post("/register", async (req, res) => {
   const { sessionId, member, products } = req.body;
 
@@ -278,7 +276,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-/* ================= CHECK SPONSOR ================= */
+
 router.get("/check-sponsor/:sponsorId", async (req, res) => {
   try {
     const pool = await poolPromise;

@@ -7,7 +7,7 @@ export async function getLegMembers(
   userId,
   leg,
   queue,
-  limit = 10,
+  limit,
   search = "",
 ) {
   const pool = await poolPromise;

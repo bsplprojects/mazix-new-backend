@@ -16,6 +16,7 @@ import repurchaseRoutes from "./routes/repurchase.routes.js";
 import teamRoutes from "./routes/team.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import reportRoutes from "./routes/report.routes.js";
+import globalSearchRoutes from "./routes/search.routes.js";
 import swaggerSpec from "./swagger.js";
 import swaggerUI from "swagger-ui-express";
 import rateLimit from "express-rate-limit";
@@ -88,6 +89,7 @@ app.use("/api-docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
 app.use("/uploads", express.static(path.join(__dirname, "Uploads")));
 
 // Routes
+app.use("/api/v1/search", globalSearchRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/joining", joiningRoutes);
 app.use("/api/v1/reward", rewardRoutes);
