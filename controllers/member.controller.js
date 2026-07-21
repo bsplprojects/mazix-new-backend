@@ -392,41 +392,36 @@ export const getLeftRightTeam = async (req, res) => {
 
     const pool = await poolPromise;
 
-    const rm = [
-      {
-        MemberID: memno,
-        PlacementID: "",
-        SponserID: memno,
-        Leaf: "",
-      },
-    ];
+    const result = await pool.request().input("memno", sql.VarChar, memno)
+      .query(`
+        ;WITH RootMembers AS (
+            SELECT MemberID, PlacementID, Leaf, Leaf AS RootLeg
+            FROM MemberEnrollment
+            WHERE PlacementID = @memno AND Leaf IN ('left', 'right')
+        ),
+        Downline AS (
+            SELECT MemberID, PlacementID, Leaf, RootLeg
+            FROM RootMembers
 
-    for (let i = 0; i < rm.length; i++) {
-      const memberId = rm[i].MemberID;
+            UNION ALL
 
-      const result = await pool
-        .request()
-        .input("PlacementID", sql.VarChar, memberId).query(`
-          SELECT MemberID, SponserID, PlacementID, Leaf
-          FROM MemberEnrollment
-          WHERE PlacementID = @PlacementID
-        `);
+            SELECT me.MemberID, me.PlacementID, me.Leaf, d.RootLeg
+            FROM MemberEnrollment me
+            INNER JOIN Downline d ON me.PlacementID = d.MemberID
+        )
+        SELECT RootLeg, COUNT(*) AS TeamCount
+        FROM Downline
+        GROUP BY RootLeg
+        OPTION (MAXRECURSION 0)
+      `);
 
-      for (const row of result.recordset) {
-        rm.push({
-          MemberID: row.MemberID,
-          SponserID: row.SponserID,
-          PlacementID: row.PlacementID,
-          Leaf: row.Leaf,
-        });
-      }
-    }
+    let leftCount = 0;
+    let rightCount = 0;
 
-    const leftCount = rm.filter((x) => x.Leaf?.toLowerCase() === "left").length;
-
-    const rightCount = rm.filter(
-      (x) => x.Leaf?.toLowerCase() === "right",
-    ).length;
+    result.recordset.forEach((row) => {
+      if (row.RootLeg?.toLowerCase() === "left") leftCount = row.TeamCount;
+      if (row.RootLeg?.toLowerCase() === "right") rightCount = row.TeamCount;
+    });
 
     return res.status(200).json({
       Pos1: leftCount,

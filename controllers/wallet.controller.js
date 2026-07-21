@@ -477,6 +477,8 @@ export const getWalletJoiningSendHistory = async (req, res) => {
       .input("status", sql.VarChar, "Received")
       .execute("Get_WalletTransferHistory");
 
+    
+
     return res.status(200).json({ success: true, data: result.recordset });
   } catch (error) {
     console.error("getWalletJoiningSendHistory Error:", error);

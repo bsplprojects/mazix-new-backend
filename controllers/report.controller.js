@@ -94,7 +94,7 @@ export async function getRepurchaseWalletTransfer(req, res) {
       .input("MemberID", sql.NVarChar(sql.MAX), MemberId || "")
       .input("Fromdate", sql.NVarChar(sql.MAX), FromDate || "")
       .input("Todate", sql.NVarChar(sql.MAX), Todate || "").query(`
-        SELECT * FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate
+        SELECT * FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate AND LOWER(Status) = 'active' ORDER BY Date DESC 
       `);
 
     return res.status(200).json({

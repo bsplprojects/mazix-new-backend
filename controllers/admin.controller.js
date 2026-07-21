@@ -2615,3 +2615,77 @@ export const deleteWalletRepurchase = async (req, res) => {
     });
   }
 };
+
+export const assignDelivery = async (req, res) => {
+  try {
+    const { id: orderNo } = req.params;
+    const { deliveryPartner, trackerId } = req.body;
+
+    if (!orderNo) {
+      return res.status(400).json({
+        success: false,
+        msg: "Order No is required",
+      });
+    }
+
+    if (!deliveryPartner || !trackerId) {
+      return res.status(400).json({
+        success: false,
+        msg: "Delivery Partner and Tracker Id are required",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    const orderResult = await pool
+      .request()
+      .input("OrderNo", sql.NVarChar, orderNo).query(`
+        SELECT OrderNo, DeliveryStatus
+        FROM OrderMaster
+        WHERE OrderNo = @OrderNo
+      `);
+
+    if (orderResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        msg: "Order not found",
+      });
+    }
+
+    const order = orderResult.recordset[0];
+
+    if (order.DeliveryStatus === "Delivered") {
+      return res.status(400).json({
+        success: false,
+        msg: "Delivered order cannot be reassigned",
+      });
+    }
+
+    await pool
+      .request()
+      .input("OrderNo", sql.NVarChar, orderNo)
+      .input("DeliveryPartner", sql.NVarChar, deliveryPartner)
+      .input("TrackingID", sql.NVarChar, trackerId)
+      .input("DispatchDate", sql.DateTime, new Date()).query(`
+        UPDATE OrderMaster
+        SET
+          DeliveryPartner = @DeliveryPartner,
+          TrackingID = @TrackingID,
+          DeliveryStatus = 'Shipped',
+          DispatchDate = @DispatchDate
+        WHERE OrderNo = @OrderNo
+      `);
+
+    return res.status(200).json({
+      success: true,
+      msg: "Delivery assigned successfully",
+    });
+  } catch (error) {
+    console.error("Assign Delivery Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      msg: error.message,
+    });
+  }
+};
