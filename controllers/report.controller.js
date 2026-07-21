@@ -229,7 +229,6 @@ export async function getPayTransferReport(req, res) {
     const { dateList, memberId } = req.query;
 
     const pool = await poolPromise;
-    console.log(dateList);
 
     const result = await pool
       .request()
@@ -607,7 +606,6 @@ export async function getPurchaseReport(req, res) {
 
     let request = pool.request();
 
-    // Date filters
     if (FromDate) {
       query += ` AND om.OrderDate >= @FromDate`;
       request.input("FromDate", sql.DateTime, new Date(FromDate));
@@ -622,7 +620,6 @@ export async function getPurchaseReport(req, res) {
       );
     }
 
-    // Filters
     if (OrderNo) {
       query += ` AND om.OrderNo LIKE @OrderNo`;
       request.input("OrderNo", sql.VarChar, `%${OrderNo}%`);
@@ -795,9 +792,9 @@ export async function getGSTReport(req, res) {
     let { FromDate, ToDate, month, page = 1, pageSize = 10 } = req.query;
 
     page = Number(page);
-    pageSize = Number(pageSize);
-
-    const offset = (page - 1) * pageSize;
+    const isAll = pageSize === "all";
+    pageSize = isAll ? null : Number(pageSize);
+    const offset = isAll ? 0 : (page - 1) * pageSize;
 
     const pool = await poolPromise;
     const request = pool.request();
@@ -846,14 +843,19 @@ export async function getGSTReport(req, res) {
       dataRequest.input("Month", sql.Int, Number(monthNumber));
     }
 
-    const dataQuery = `
-      SELECT *
-      FROM RepProductOrder
-      ${where}
-      ORDER BY OrderDate DESC
-      OFFSET ${offset} ROWS
-      FETCH NEXT ${pageSize} ROWS ONLY
-    `;
+    let dataQuery = `
+    SELECT *
+    FROM RepProductOrder
+    ${where}
+    ORDER BY OrderDate DESC
+`;
+
+    if (!isAll) {
+      dataQuery += `
+    OFFSET ${offset} ROWS
+    FETCH NEXT ${pageSize} ROWS ONLY
+  `;
+    }
 
     const result = await dataRequest.query(dataQuery);
 
@@ -882,10 +884,10 @@ export async function getGSTReport(req, res) {
     return res.status(200).json({
       success: true,
       msg: "Fetched successfully",
-      page,
-      pageSize,
+      page: isAll ? 1 : page,
+      pageSize: isAll ? totalRecords : pageSize,
       totalRecords,
-      totalPages: Math.ceil(totalRecords / pageSize),
+      totalPages: isAll ? 1 : Math.ceil(totalRecords / pageSize),
       data: result.recordset,
       totalGST,
     });

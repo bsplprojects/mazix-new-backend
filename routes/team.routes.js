@@ -198,17 +198,10 @@ router.get("/datewise/:id", getDatewiseDownline);
 router.post("/:leg/:userId", async (req, res) => {
   try {
     const { userId, leg } = req.params;
-
-    const limit = Number(req.body.limit || 100);
-
+    const limit = Number(req.body.limit) > 0 ? Number(req.body.limit) : 100;
     const search = (req.body.search || "").trim();
-
-    let queue = req.body.queue
-      ? JSON.parse(Buffer.from(req.body.queue, "base64").toString())
-      : [];
-
-    const data = await getLegMembers(userId, leg, queue, limit, search);
-
+    const cursor = req.body.queue || null;
+    const data = await getLegMembers(userId, leg, cursor, limit, search);
     res.status(200).json(data);
   } catch (err) {
     console.error(err);
@@ -218,7 +211,6 @@ router.post("/:leg/:userId", async (req, res) => {
     });
   }
 });
-
 
 // DUPLICATE API
 // router.post("/:leg/:userId", async (req, res) => {

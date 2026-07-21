@@ -251,11 +251,11 @@ export const getAdminTokenList = async (req, res) => {
 
     const result = await pool
       .request()
-      .input("MemberID", sql.VarChar, memberId || "")
-      .input("TokenType", sql.VarChar, TokenDropDownList || "")
-      .input("PackageName", sql.VarChar, PackageDropDownList || "")
-      .input("FromDate", sql.VarChar, Fromdate || "")
-      .input("ToDate", sql.VarChar, Todate || "")
+      .input("memberNo", sql.VarChar, memberId || "")
+      .input("tokenType", sql.VarChar, TokenDropDownList || "")
+      .input("package", sql.VarChar, PackageDropDownList || "")
+      .input("Fdate", sql.VarChar, Fromdate || "")
+      .input("Tdate", sql.VarChar, Todate || "")
       .execute("Get_TokenGenerated");
 
     const data = result.recordset.map((row) => ({
@@ -875,7 +875,7 @@ export const addProduct = async (req, res) => {
         .input("Status", sql.VarChar, Status || "Active")
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
-        .input("Repurchase", sql.Int, Number(Repurchase) || 0)
+        .input("Repurchase", sql.NVarChar, Repurchase || "0")
         .input("seqOnline", sql.Int, Number(seqOnline) || 0)
         .input("Image", sql.NVarChar, imageURL)
         .input("stock", sql.Decimal(18, 2), Number(stock) || 0)
@@ -924,7 +924,7 @@ export const addProduct = async (req, res) => {
         .input("Status", sql.VarChar, Status || "Active")
         .input("Discount", sql.Decimal(18, 2), Discount)
         .input("BV", sql.Decimal(18, 2), BV)
-        .input("Repurchase", sql.Int, Number(Repurchase) || 0)
+        .input("Repurchase", sql.NVarChar, Repurchase || "0")
         .input("seqOnline", sql.Int, Number(seqOnline) || 0)
         .input("Image", sql.NVarChar, imageURL)
         .input("stock", sql.Decimal(18, 2), Number(stock) || 0)
@@ -2472,6 +2472,146 @@ export const createPaymentTransfer = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+};
+
+export const deletePayTransfer = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ success: false, msg: "Id is required" });
+    }
+
+    const pool = await poolPromise;
+
+    const result = await pool
+      .request()
+      .input("BinaryPayoutID", sql.BigInt, Number(id)).query(`
+        UPDATE Get_MemberPaymentTransferedDetail SET Status='Inactive' WHERE BinaryPayoutID=@BinaryPayoutID
+      `);
+
+    if (result.rowsAffected[0] > 0) {
+      return res
+        .status(200)
+        .json({ success: true, msg: "Deleted Successfully" });
+    }
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getFranchise = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+
+    const { page = 1, pageSize = 10 } = req.params;
+
+    const size = Number(pageSize);
+    const pageNumber = Number(page);
+    const offset = (pageNumber - 1) * size;
+
+    const result = await pool
+      .request()
+      .input("offset", sql.Int, offset)
+      .input("size", sql.Int, size).query(`
+      SELECT * FROM MemberPersonalInfo WHERE LOWER(ExtraFD) = 'franchise'
+      ORDER BY MID DESC OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
+    `);
+
+    const count = await pool
+      .request()
+      .query(
+        `SELECT COUNT(*) AS count FROM MemberPersonalInfo WHERE LOWER(ExtraFD) = 'franchise'`,
+      );
+
+    return res.status(200).json({
+      success: true,
+      data: result.recordset,
+      pagination: {
+        currentPage: pageNumber,
+        totalPage: Math.ceil(result.recordset.length / size),
+        hasNext: pageNumber < Math.ceil(result.recordset.length / size),
+        hasPrev: pageNumber > 1,
+        total: count.recordset?.[0]?.count || 0,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      msg: error.message,
+    });
+  }
+};
+
+export const deleteWalletJoining = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pool = await poolPromise;
+
+    const checkResult = await pool.request().input("id", sql.BigInt, Number(id))
+      .query(`
+        SELECT *
+        FROM WalletTransfer
+        WHERE WalletTranferID = @id
+      `);
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Wallet transfer not found",
+      });
+    }
+
+    await pool.request().input("id", sql.BigInt, Number(id)).query(`
+        UPDATE WalletTransfer
+        SET Status = 'Deactive', ModifyDate = GETDATE()
+        WHERE WalletTranferID = @id
+      `);
+
+    return res.status(200).json({
+      success: true,
+      message: "Wallet transfer deleted successfully",
+    });
+  } catch (err) {
+    console.error("Wallet Transfer Delete Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export const deleteWalletRepurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pool = await poolPromise;
+
+    const result = await pool.request().input("id", sql.BigInt, Number(id))
+      .query(`
+        UPDATE RepurchaseWalletTransfer
+        SET Status = 'Deactive'
+        WHERE RepWalletTranferID = @id
+      `);
+
+    return res.status(200).json({
+      success: result.rowsAffected[0] > 0,
+      message:
+        result.rowsAffected[0] > 0
+          ? "Repurchase wallet transfer deleted successfully."
+          : "Repurchase wallet transfer not found.",
+    });
+  } catch (error) {
+    console.error("Repurchase Wallet Transfer Delete Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
     });
   }
 };

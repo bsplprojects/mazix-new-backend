@@ -135,6 +135,7 @@ router.get("/member-dashboard", async (req, res) => {
       .request()
       .input("MemberID", sql.NVarChar, MemberID)
       .execute("Get_RepMainWallet");
+      
     const currentWallet = Object.values(wallet.recordset?.[0] || {})[0] || 0;
 
     const currentRepWallet =
@@ -232,8 +233,7 @@ router.post("/register", async (req, res) => {
     if (!MID) {
       throw new Error("Member insert failed");
     }
-
-    /* ================= PERSONAL INFO ================= */
+   
     await request.query(`
       INSERT INTO MemberPersonalInfo
       (MID, MemberID, MemberName, GuardianName, Gender, Age, Address, District, StateID, Country, Pincode, ContactNo, EmailID)
@@ -243,7 +243,6 @@ router.post("/register", async (req, res) => {
       '${member.Pincode}', '${member.ContactNo}', '${member.EmailID}')
     `);
 
-    /* ================= PRODUCTS ================= */
     for (const item of products) {
       const r = await request.query(`
         INSERT INTO MemberProductActivationParticular

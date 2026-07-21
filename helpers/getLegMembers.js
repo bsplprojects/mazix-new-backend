@@ -3,149 +3,298 @@ import express from "express";
 import sql from "mssql";
 import { poolPromise } from "../db.js";
 
-export async function getLegMembers(
-  userId,
-  leg,
-  queue,
-  limit,
-  search = "",
-) {
+const CHUNK_SIZE = 800;
+
+function encodeCursor(state) {
+  return Buffer.from(JSON.stringify(state)).toString("base64");
+}
+
+function decodeCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    return JSON.parse(Buffer.from(cursor, "base64").toString());
+  } catch (error) {
+    return null;
+  }
+}
+
+function matchesSearch(m, search) {
+  if (!search) return true;
+  const s = search.toLowerCase();
+  return (
+    String(m.MemberID).toLowerCase().includes(s) ||
+    String(m.MemberName || "")
+      .toLowerCase()
+      .includes(s)
+  );
+}
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
+async function fetchChildren(pool, placementIds) {
+  if (!placementIds.length) return [];
+  const out = [];
+
+  for (const group of chunkArray(placementIds, CHUNK_SIZE)) {
+    const request = pool.request();
+    group.forEach((id, i) => request.input(`id${i}`, sql.NVarChar, id));
+    const placeholders = group.map((_, i) => `@id${i}`).join(",");
+
+    const res = await request.query(`
+      SELECT
+        m.MemberID, m.MemberName, m.PlacementID, m.SponserID,
+        m.DOJ, m.Leaf, m.BV,
+        ISNULL(r.Designation, '') AS Designation
+      FROM Member_View m
+      OUTER APPLY (
+        SELECT TOP (1) Designation
+        FROM MemberRewardSection mr
+        WHERE mr.MemberID = m.MemberID
+        ORDER BY mr.RewardID DESC
+      ) r
+      WHERE m.PlacementID IN (${placeholders})
+    `);
+    out.push(...res.recordset);
+  }
+
+  return out;
+}
+
+async function fetchRepurchaseBV(pool, memberIds) {
+  const map = {};
+  if (!memberIds.length) return map;
+
+  for (const group of chunkArray(memberIds, CHUNK_SIZE)) {
+    const request = pool.request();
+    group.forEach((id, i) => request.input(`id${i}`, sql.NVarChar, id));
+    const placeHolders = group.map((_, i) => `@id${i}`).join(",");
+
+    const res = await request.query(`
+      SELECT MemberID, SUM(TotalBV) AS TotalRepBV FROM RepProductOrder WHERE MemberID IN (${placeHolders}) GROUP BY MemberID
+    `);
+    res.recordset.forEach((row) => {
+      map[row.MemberID] = Number(row.TotalRepBV || 0);
+    });
+  }
+  return map;
+}
+
+// OLD API returning data but not all
+// export async function getLegMembers(userId, leg, queue, limit, search = "") {
+//   const pool = await poolPromise;
+
+//   let members = [];
+
+//   // FIRST REQUEST
+//   if (queue.length === 0) {
+//     const first = await pool
+//       .request()
+//       .input("userId", sql.NVarChar, userId)
+//       .input("leg", sql.NVarChar, leg).query(`
+//         SELECT MemberID,MemberName,PlacementID,
+//                SponserID,DOJ,Leaf,BV
+//         FROM Member_View
+//         WHERE PlacementID=@userId
+//         AND Leaf=@leg
+//       `);
+
+//     if (!first.recordset.length) {
+//       return {
+//         members: [],
+//         nextCursor: null,
+//       };
+//     }
+
+//     const firstMember = first.recordset[0];
+//     members.push(firstMember);
+//     queue.push(firstMember.MemberID);
+//   }
+
+//   // BFS Traversal
+//   while (queue.length && members.length < limit) {
+//     const currentBatch = [...queue];
+//     queue = [];
+
+//     const request = pool.request();
+
+//     currentBatch.forEach((id, index) => {
+//       request.input(`id${index}`, sql.NVarChar, id);
+//     });
+
+//     if (search) {
+//       request.input("search", sql.NVarChar, `%${search}%`);
+//     }
+
+//     const ids = currentBatch.map((_, i) => `@id${i}`).join(",");
+
+//     const downline = await request.query(`
+//      SELECT
+//             m.MemberID,
+//             m.MemberName,
+//             m.PlacementID,
+//             m.SponserID,
+//             m.DOJ,
+//             m.Leaf,
+//             m.BV,
+//             ISNULL(r.Designation, '') AS Designation
+//         FROM Member_View m
+//         OUTER APPLY (
+//             SELECT TOP (1) Designation
+//             FROM MemberRewardSection mr
+//             WHERE mr.MemberID = m.MemberID
+//             ORDER BY mr.RewardID DESC
+//         ) r
+//         WHERE m.PlacementID IN (${ids})
+//         ${
+//           search
+//             ? `
+//         AND (
+//             m.MemberID LIKE @search
+//             OR m.MemberName LIKE @search
+//         )
+//         `
+//             : ""
+//         }
+//   `);
+
+//     members.push(...downline.recordset);
+//     queue.push(...downline.recordset.map((x) => x.MemberID));
+//   }
+
+//   members = members.slice(0, limit);
+
+//   // count total joining BV
+//   const totalBV = members.reduce((acc, m) => acc + Number(m.BV || 0), 0);
+
+//   // count total Repurchase BV
+//   const memberIds = members.map((m) => m.MemberID);
+//   if (memberIds.length) {
+//     const request = pool.request();
+
+//     memberIds.forEach((id, index) => {
+//       request.input(`id${index}`, sql.NVarChar, id);
+//     });
+
+//     const ids = memberIds.map((_, i) => `@id${i}`).join(",");
+
+//     const repurchase = await request.query(`
+//       SELECT
+//           MemberID,
+//           SUM(TotalBV) AS TotalRepBV
+//       FROM RepProductOrder
+//       WHERE MemberID IN (${ids})
+//       GROUP BY MemberID
+//   `);
+
+//     const repurchaseMap = {};
+
+//     repurchase.recordset.forEach((row) => {
+//       repurchaseMap[row.MemberID] = Number(row.TotalRepBV || 0);
+//     });
+
+//     members = members.map((member) => ({
+//       ...member,
+//       repurchaseBV: repurchaseMap[member.MemberID] || 0,
+//     }));
+//   }
+
+//   return {
+//     totalBV,
+//     members: members.map((m) => ({
+//       id: m.MemberID,
+//       name: m.MemberName,
+//       placementId: m.PlacementID,
+//       joinDate: m.DOJ,
+//       leg: m.Leaf,
+//       bv: Number(m.BV || 0),
+//       repurchaseBV: m.repurchaseBV,
+//       active: Number(m.BV || 0) > 0,
+//       rank: m.Designation,
+//     })),
+
+//     nextCursor:
+//       queue.length > 0
+//         ? Buffer.from(JSON.stringify(queue)).toString("base64")
+//         : null,
+//   };
+// }
+
+export async function getLegMembers(userId, leg, cursor, limit, search = "") {
   const pool = await poolPromise;
+  const state = decodeCursor(cursor);
 
-  let members = [];
+  let frontier = state ? state.frontier : null;
+  let buffer = state ? state.buffer || [] : [];
 
-  // FIRST REQUEST
-  if (queue.length === 0) {
-    const first = await pool
+  if (frontier == null) {
+    const rootRes = await pool
       .request()
       .input("userId", sql.NVarChar, userId)
       .input("leg", sql.NVarChar, leg).query(`
-        SELECT MemberID,MemberName,PlacementID,
-               SponserID,DOJ,Leaf,BV
-        FROM Member_View
-        WHERE PlacementID=@userId
-        AND Leaf=@leg
-      `);
-
-    if (!first.recordset.length) {
-      return {
-        members: [],
-        nextCursor: null,
-      };
-    }
-
-    const firstMember = first.recordset[0];
-
-    members.push(firstMember);
-
-    queue.push(firstMember.MemberID);
-  }
-
-  while (queue.length && members.length < limit) {
-    const currentBatch = [...queue];
-    queue = [];
-
-    const request = pool.request();
-
-    currentBatch.forEach((id, index) => {
-      request.input(`id${index}`, sql.NVarChar, id);
-    });
-
-    if (search) {
-      request.input("search", sql.NVarChar, `%${search}%`);
-    }
-
-    const ids = currentBatch.map((_, i) => `@id${i}`).join(",");
-
-    const downline = await request.query(`
-     SELECT
-            m.MemberID,
-            m.MemberName,
-            m.PlacementID,
-            m.SponserID,
-            m.DOJ,
-            m.Leaf,
-            m.BV,
-            ISNULL(r.Designation, '') AS Designation
+        SELECT TOP (1)
+          m.MemberID, m.MemberName, m.PlacementID, m.SponserID,
+          m.DOJ, m.Leaf, m.BV,
+          ISNULL(r.Designation, '') AS Designation
         FROM Member_View m
         OUTER APPLY (
-            SELECT TOP (1) Designation
-            FROM MemberRewardSection mr
-            WHERE mr.MemberID = m.MemberID
-            ORDER BY mr.RewardID DESC
+          SELECT TOP (1) Designation
+          FROM MemberRewardSection mr
+          WHERE mr.MemberID = m.MemberID
+          ORDER BY mr.RewardID DESC
         ) r
-        WHERE m.PlacementID IN (${ids})
-        ${
-          search
-            ? `
-        AND (
-            m.MemberID LIKE @search
-            OR m.MemberName LIKE @search
-        )
-        `
-            : ""
-        }
-  `);
+        WHERE m.PlacementID = @userId AND m.Leaf = @leg
+      `);
 
-    members.push(...downline.recordset);
-    queue.push(...downline.recordset.map((x) => x.MemberID));
+    if (!rootRes.recordset.length) {
+      return { totalBV: 0, members: [], nextCursor: null };
+    }
+
+    const root = rootRes.recordset[0];
+    frontier = [root.MemberID];
+
+    if (matchesSearch(root, search)) buffer.push(root);
   }
 
-  members = members.slice(0, limit);
-
-  // count total joining BV
-  const totalBV = members.reduce((acc, m) => acc + Number(m.BV || 0), 0);
-
-  // count total Repurchase BV
-  const memberIds = members.map((m) => m.MemberID);
-  if (memberIds.length) {
-    const request = pool.request();
-
-    memberIds.forEach((id, index) => {
-      request.input(`id${index}`, sql.NVarChar, id);
-    });
-
-    const ids = memberIds.map((_, i) => `@id${i}`).join(",");
-
-    const repurchase = await request.query(`
-      SELECT
-          MemberID,
-          SUM(TotalBV) AS TotalRepBV
-      FROM RepProductOrder
-      WHERE MemberID IN (${ids})
-      GROUP BY MemberID
-  `);
-
-    const repurchaseMap = {};
-
-    repurchase.recordset.forEach((row) => {
-      repurchaseMap[row.MemberID] = Number(row.TotalRepBV || 0);
-    });
-
-    members = members.map((member) => ({
-      ...member,
-      repurchaseBV: repurchaseMap[member.MemberID] || 0,
-    }));
+  while (buffer.length < limit && frontier.length > 0) {
+    const children = await fetchChildren(pool, frontier);
+    frontier = children.map((c) => c.MemberID);
+    buffer.push(...children.filter((c) => matchesSearch(c, search)));
   }
+
+  const pageMembers = buffer.slice(0, limit);
+  const remainingBuffer = buffer.slice(limit);
+
+  const repurchaseMap = await fetchRepurchaseBV(
+    pool,
+    pageMembers.map((m) => m.MemberID),
+  );
+
+  const totalBV = pageMembers.reduce((acc, m) => acc + Number(m.BV || 0), 0);
+  const nextCursor =
+    remainingBuffer.length > 0 || frontier.length > 0
+      ? encodeCursor({ frontier, buffer: remainingBuffer })
+      : null;
 
   return {
     totalBV,
-    members: members.map((m) => ({
+    members: pageMembers.map((m) => ({
       id: m.MemberID,
       name: m.MemberName,
       placementId: m.PlacementID,
       joinDate: m.DOJ,
       leg: m.Leaf,
       bv: Number(m.BV || 0),
-      repurchaseBV: m.repurchaseBV,
+      repurchaseBV: repurchaseMap[m.MemberID] || 0,
       active: Number(m.BV || 0) > 0,
       rank: m.Designation,
     })),
-
-    nextCursor:
-      queue.length > 0
-        ? Buffer.from(JSON.stringify(queue)).toString("base64")
-        : null,
+    nextCursor,
   };
 }
 

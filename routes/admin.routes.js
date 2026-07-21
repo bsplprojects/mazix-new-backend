@@ -37,13 +37,16 @@ import {
   createReward,
   getOTP,
   createPaymentTransfer,
+  deletePayTransfer,
+  getFranchise,
+  deleteWalletJoining,
+  deleteWalletRepurchase,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
 
 const router = express.Router();
 
-router.route("/login").post(adminLogin);
 router.route("/purchase-receipt").get(isAdmin, getPurchaseReceipt);
 router.route("/header").get(isAdmin, getHeaderValue);
 router.route("/charts").get(isAdmin, getDashboardCharts);
@@ -60,7 +63,9 @@ router.route("/member-payout-details").get(isAdmin, getMemberPayoutDetails);
 router.route("/sale/invoice").get(isAdmin, getInvoiceList);
 router.route("/invoice/stock").get(isAdmin, getInvoice);
 router.route("/member/otp").get(isAdmin, getOTP);
+router.route("/franchise").get(isAdmin, getFranchise);
 
+router.route("/login").post(adminLogin);
 router.route("/events/new").post(isAdmin, addEvent);
 router.route("/send-token").post(isAdmin, sendToken);
 router.route("/package/new").post(isAdmin, addPackage);
@@ -84,5 +89,8 @@ router.route("/package/:id").delete(isAdmin, deletePackage);
 router.route("/news/:id").delete(isAdmin, deleteNews);
 router.route("/events/:id").delete(isAdmin, deleteEvents);
 router.route("/sale/invoice/:id").delete(isAdmin, deleteInvoice);
+router.route("/reports/pay-transfer/:id").delete(isAdmin, deletePayTransfer);
+router.route("/wallet/joining/:id").delete(isAdmin, deleteWalletJoining);
+router.route("/wallet/repurchase/:id").delete(isAdmin, deleteWalletRepurchase);
 
 export default router;
