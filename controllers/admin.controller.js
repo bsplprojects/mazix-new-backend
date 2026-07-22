@@ -1497,22 +1497,80 @@ export const getMemberPassword = async (req, res) => {
 export const getPANRecord = async (req, res) => {
   try {
     const pool = await poolPromise;
+    const { pageSize = "10", page = "1", search = "" } = req.query;
 
-    const result = await pool.request().query(`
-            SELECT
-                MPersonID,
-                MemberID,
-                MemberName,
-                PAN,
-                ModifyDate
-            FROM MemberPersonalInfo
-            WHERE Flag = '1'
-              AND PAN IS NOT NULL
-              AND ModifyDate >= '2022-04-01'
-            ORDER BY ModifyDate DESC
-        `);
+    const pageNumber = Number(page);
+    const isAll = String(pageSize).toLowerCase().trim() === "all";
+    const size = isAll ? 0 : Number(pageSize);
+    const offset = isAll ? 0 : (pageNumber - 1) * size;
 
-    res.json(result.recordset);
+    const countResult = await pool.request().query(`
+      SELECT COUNT(*) AS TotalCount
+      FROM MemberPersonalInfo
+      WHERE Flag = '1'
+        AND PAN IS NOT NULL
+        AND ModifyDate >= '2022-04-01'
+  `);
+
+    const totalCount = countResult.recordset[0].TotalCount;
+
+    const request = pool.request();
+
+    let result;
+
+    if (isAll) {
+      result = await request.input("search", sql.VarChar, search.toLowerCase())
+        .query(`
+      SELECT
+          MPersonID,
+          MemberID,
+          MemberName,
+          PAN,
+          ModifyDate
+      FROM MemberPersonalInfo
+      WHERE Flag = '1'
+        AND PAN IS NOT NULL
+        AND ModifyDate >= '2022-04-01'
+        AND MemberName LIKE '%' + @search + '%'
+      ORDER BY ModifyDate DESC
+    `);
+    } else {
+      result = await request
+        .input("offset", sql.Int, offset)
+        .input("size", sql.Int, size)
+        .input("search", sql.VarChar, search.toLowerCase()).query(`
+        SELECT
+            MPersonID,
+            MemberID,
+            MemberName,
+            PAN,
+            ModifyDate
+        FROM MemberPersonalInfo
+        WHERE Flag = '1'
+          AND PAN IS NOT NULL
+          AND ModifyDate >= '2022-04-01'
+          AND MemberName LIKE '%' + @search + '%'
+        ORDER BY ModifyDate DESC
+        OFFSET @offset ROWS
+        FETCH NEXT @size ROWS ONLY
+      `);
+    }
+
+    res.status(200).json({
+      success: true,
+      msg: "Fetched Successfully",
+      data: result.recordset,
+      pagination: isAll
+        ? null
+        : {
+            total: totalCount,
+            page: pageNumber,
+            size,
+            totalPages: Math.ceil(totalCount / size),
+            hasNext: pageNumber < Math.ceil(totalCount / size),
+            hasPrev: pageNumber > 1,
+          },
+    });
   } catch (error) {
     console.error("GetPanRecord Error:", error);
     res.status(500).json({

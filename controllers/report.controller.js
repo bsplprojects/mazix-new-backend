@@ -253,7 +253,7 @@ export async function getPayTransferReport(req, res) {
 export async function getRewardReport(req, res) {
   try {
     const {
-      MemberID,
+      MemberId,
       Designation,
       Fromdate,
       Todate,
@@ -269,15 +269,15 @@ export async function getRewardReport(req, res) {
     const size = isAll ? null : parseInt(pageSize, 10);
     const offset = isAll ? 0 : (pageNumber - 1) * size;
 
-    let whereClause = "WHERE 1=1";
+    let whereClause = "WHERE 1=1 AND mrs.Flag = '2025-26'";
 
     const countRequest = pool.request();
     const dataRequest = pool.request();
 
-    if (MemberID) {
+    if (MemberId) {
       whereClause += " AND mrs.MemberID = @MemberID";
-      countRequest.input("MemberID", sql.VarChar, MemberID);
-      dataRequest.input("MemberID", sql.VarChar, MemberID);
+      countRequest.input("MemberID", sql.VarChar, MemberId);
+      dataRequest.input("MemberID", sql.VarChar, MemberId);
     }
 
     if (Designation) {
@@ -339,7 +339,8 @@ export async function getRewardReport(req, res) {
           mrs.AchievedPVAmt,
           mrs.AchievedBVAmt,
           mrs.Status,
-          mrs.ModifyDate
+          mrs.ModifyDate,
+          mrs.Flag as Year
       FROM MemberRewardSection mrs
       LEFT JOIN MemberPersonalInfo mpi
           ON mpi.MemberID = mrs.MemberID
