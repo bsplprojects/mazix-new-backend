@@ -2389,7 +2389,7 @@ export const createPaymentTransfer = async (req, res) => {
       const payout = await new sql.Request(transaction).input(
         "BinaryPayoutID",
         sql.Int,
-        Number(item.BinaryPayoutID),
+        Number(item),
       ).query(`
             SELECT *
             FROM PayoutBinary
@@ -2399,6 +2399,8 @@ export const createPaymentTransfer = async (req, res) => {
       if (payout.recordset.length === 0) continue;
 
       const obj = payout.recordset[0];
+
+      console.log(obj)
 
       const insertResult = await new sql.Request(transaction)
         .input("BinaryPayoutID", sql.Int, obj.BinaryPayoutID)
@@ -2418,7 +2420,7 @@ export const createPaymentTransfer = async (req, res) => {
         .input("Amount", sql.Decimal(18, 2), obj.Amount)
         .input("TDS", sql.Decimal(18, 2), obj.TDS)
         .input("AdminCharge", sql.Decimal(18, 2), obj.AdminCharge)
-        .input("Vouchur", sql.VarChar, obj.Vouchur)
+        .input("Vouchur", sql.Decimal(18, 2), obj.Vouchur)
         .input("Payable", sql.Decimal(18, 2), obj.Payable)
         .input("PayoutDate", sql.DateTime, obj.PayoutDate)
         .input("PayoutFromDate", sql.DateTime, obj.PayoutFromDate)
@@ -2429,6 +2431,7 @@ export const createPaymentTransfer = async (req, res) => {
         .input("PaymentStatus", sql.VarChar, "Done")
         .input("PaymentDate", sql.DateTime, new Date())
         .input("LoginID", sql.BigInt, loginID)
+        .input("createdAt", sql.DateTime, new Date())
         .input("Bonus", sql.Decimal(18, 2), obj.Bonus).query(`
             INSERT INTO MemberPaymentTransfer
             (
@@ -2460,7 +2463,8 @@ export const createPaymentTransfer = async (req, res) => {
                 PaymentStatus,
                 PaymentDate,
                 LoginID,
-                Bonus
+                Bonus,
+                createdAt
             )
             VALUES
             (
@@ -2492,7 +2496,8 @@ export const createPaymentTransfer = async (req, res) => {
                 @PaymentStatus,
                 @PaymentDate,
                 @LoginID,
-                @Bonus
+                @Bonus,
+                @createdAt
             );
 
             SELECT SCOPE_IDENTITY() AS MemPayTransID;
@@ -2519,6 +2524,7 @@ export const createPaymentTransfer = async (req, res) => {
 
     return res.status(200).json(id);
   } catch (err) {
+    console.log(err);
     if (transaction) {
       try {
         await transaction.rollback();
