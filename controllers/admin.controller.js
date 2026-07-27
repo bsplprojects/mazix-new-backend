@@ -2679,22 +2679,56 @@ export const deleteWalletRepurchase = async (req, res) => {
     const { id } = req.params;
 
     const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool.request().input("id", sql.BigInt, Number(id))
-      .query(`
-        UPDATE RepurchaseWalletTransfer
-        SET Status = 'Deactive'
-        WHERE RepWalletTranferID = @id
-      `);
+    await transaction.begin();
+
+    const checkResult = await new sql.Request(transaction).input(
+      "id",
+      sql.BigInt,
+      Number(id),
+    ).query(`
+      SELECT RepWalletTranferID, TransactionId
+      FROM RepurchaseWalletTransfer
+      WHERE RepWalletTranferID = @id
+    `);
+
+    if (checkResult.recordset.length === 0) {
+      await transaction.rollback();
+
+      return res.status(404).json({
+        success: false,
+        message: "Repurchase wallet transfer not found.",
+      });
+    }
+
+    const { TransactionId } = checkResult.recordset[0];
+
+    await new sql.Request(transaction).input(
+      "TransactionId",
+      sql.NVarChar,
+      TransactionId,
+    ).query(`
+      UPDATE RepurchaseWalletTransfer
+      SET
+        Status = 'Deactive',
+        ModifyDate = GETDATE()
+      WHERE TransactionId = @TransactionId
+    `);
+
+    await transaction.commit();
 
     return res.status(200).json({
-      success: result.rowsAffected[0] > 0,
-      message:
-        result.rowsAffected[0] > 0
-          ? "Repurchase wallet transfer deleted successfully."
-          : "Repurchase wallet transfer not found.",
+      success: true,
+      message: "Repurchase wallet transfer deleted successfully.",
     });
   } catch (error) {
+    if (transaction) {
+      try {
+        await transaction.rollback();
+      } catch (_) {}
+    }
+
     console.error("Repurchase Wallet Transfer Delete Error:", error);
 
     return res.status(500).json({

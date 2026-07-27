@@ -317,7 +317,7 @@ export const getRepurchaseMemberWalletHistory = async (req, res) => {
 export const repTransferMainWallet = async (req, res) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
-
+  const transactionId = uuidV4();
   try {
     const { FromMemberID, ToMemberID, TransferWallet, MainWallet } = req.body;
 
@@ -366,7 +366,8 @@ export const repTransferMainWallet = async (req, res) => {
       .input("Status", sql.VarChar, "Active")
       .input("Flag", sql.VarChar, "Send")
       .input("WalletType", sql.VarChar, "Wallet")
-      .input("ModifyDate", sql.DateTime, new Date()).query(`
+      .input("ModifyDate", sql.DateTime, new Date())
+      .input("TransactionId", sql.NVarChar, transactionId).query(`
         INSERT INTO RepurchaseWalletTransfer
         (
           MID,
@@ -378,7 +379,8 @@ export const repTransferMainWallet = async (req, res) => {
           Status,
           Flag,
           WalletType,
-          ModifyDate
+          ModifyDate,
+          TransactionId
         )
         VALUES
         (
@@ -391,7 +393,8 @@ export const repTransferMainWallet = async (req, res) => {
           @Status,
           @Flag,
           @WalletType,
-          @ModifyDate
+          @ModifyDate,
+          @TransactionId
         )
       `);
 
@@ -405,7 +408,8 @@ export const repTransferMainWallet = async (req, res) => {
       .input("Status", sql.VarChar, "Active")
       .input("Flag", sql.VarChar, "Received")
       .input("WalletType", sql.VarChar, "Wallet")
-      .input("ModifyDate", sql.DateTime, new Date()).query(`
+      .input("ModifyDate", sql.DateTime, new Date())
+      .input("TransactionId", sql.NVarChar, transactionId).query(`
         INSERT INTO RepurchaseWalletTransfer
         (
           MID,
@@ -417,7 +421,8 @@ export const repTransferMainWallet = async (req, res) => {
           Status,
           Flag,
           WalletType,
-          ModifyDate
+          ModifyDate,
+          TransactionId
         )
         VALUES
         (
@@ -430,7 +435,8 @@ export const repTransferMainWallet = async (req, res) => {
           @Status,
           @Flag,
           @WalletType,
-          @ModifyDate
+          @ModifyDate,
+          @TransactionId
         )
       `);
 
@@ -445,6 +451,7 @@ export const repTransferMainWallet = async (req, res) => {
       Amount: walletResult.recordset?.[0]?.Value || 0,
       Message: "Wallet Transfer Successfully",
     });
+    
   } catch (error) {
     try {
       if (transaction._aborted !== true) {
