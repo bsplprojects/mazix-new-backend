@@ -97,9 +97,27 @@ export async function getRepurchaseWalletTransfer(req, res) {
         SELECT * FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate AND LOWER(Status) = 'active' ORDER BY Date DESC 
       `);
 
+    const totalSend = await pool
+      .request()
+      .input("MemberID", sql.NVarChar(sql.MAX), MemberId || "")
+      .input("Fromdate", sql.NVarChar(sql.MAX), FromDate || "")
+      .input("Todate", sql.NVarChar(sql.MAX), Todate || "").query(`
+      SELECT SUM(Amount) as TotalSend FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate AND LOWER(Status) = 'active' AND LOWER(Flag) = 'send'
+    `);
+
+    const totalReceived = await pool
+      .request()
+      .input("MemberID", sql.NVarChar(sql.MAX), MemberId || "")
+      .input("Fromdate", sql.NVarChar(sql.MAX), FromDate || "")
+      .input("Todate", sql.NVarChar(sql.MAX), Todate || "").query(`
+      SELECT SUM(Amount) as TotalReceived FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate AND LOWER(Status) = 'active' AND LOWER(Flag) = 'received'
+    `);
+
     return res.status(200).json({
       success: true,
       data: result.recordset,
+      totalSend: totalSend.recordset[0].TotalSend,
+      totalReceived: totalReceived.recordset[0].TotalReceived,
     });
   } catch (error) {
     console.error("getAdminChargeDetail Error:", error);

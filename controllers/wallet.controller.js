@@ -1,5 +1,6 @@
 import { poolPromise } from "../db.js";
 import sql from "mssql";
+import { v4 as uuidV4 } from "uuid";
 
 export const getMemberWallet = async (req, res) => {
   try {
@@ -81,7 +82,7 @@ export const getWalletSendHistory = async (req, res) => {
 export const transferMainWallet = async (req, res) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
-
+  const transactionId = uuidV4();
   try {
     const { FromMemberID, ToMemberID, TransferWallet, MainWallet } = req.body;
 
@@ -137,7 +138,8 @@ export const transferMainWallet = async (req, res) => {
       .input("Status", sql.VarChar, "Active")
       .input("Flag", sql.VarChar, "Send")
       .input("WalletType", sql.VarChar, "Wallet")
-      .input("ModifyDate", sql.DateTime, new Date()).query(`
+      .input("ModifyDate", sql.DateTime, new Date())
+      .input("TransactionId", sql.NVarChar, transactionId).query(`
         INSERT INTO WalletTransfer
         (
           MID,
@@ -149,7 +151,8 @@ export const transferMainWallet = async (req, res) => {
           Status,
           Flag,
           WalletType,
-          ModifyDate
+          ModifyDate,
+          TransactionId
         )
         VALUES
         (
@@ -162,7 +165,8 @@ export const transferMainWallet = async (req, res) => {
           @Status,
           @Flag,
           @WalletType,
-          @ModifyDate
+          @ModifyDate,
+          @TransactionId
         )
       `);
 
@@ -177,7 +181,8 @@ export const transferMainWallet = async (req, res) => {
       .input("Status", sql.VarChar, "Active")
       .input("Flag", sql.VarChar, "Received")
       .input("WalletType", sql.VarChar, "Wallet")
-      .input("ModifyDate", sql.DateTime, new Date()).query(`
+      .input("ModifyDate", sql.DateTime, new Date())
+      .input("TransactionId", sql.NVarChar, transactionId).query(`
         INSERT INTO WalletTransfer
         (
           MID,
@@ -189,7 +194,8 @@ export const transferMainWallet = async (req, res) => {
           Status,
           Flag,
           WalletType,
-          ModifyDate
+          ModifyDate,
+          TransactionId
         )
         VALUES
         (
@@ -202,7 +208,8 @@ export const transferMainWallet = async (req, res) => {
           @Status,
           @Flag,
           @WalletType,
-          @ModifyDate
+          @ModifyDate,
+          @TransactionId
         )
       `);
 
@@ -476,8 +483,6 @@ export const getWalletJoiningSendHistory = async (req, res) => {
       .input("toDate", sql.VarChar, tdt.toISOString())
       .input("status", sql.VarChar, "Received")
       .execute("Get_WalletTransferHistory");
-
-    
 
     return res.status(200).json({ success: true, data: result.recordset });
   } catch (error) {

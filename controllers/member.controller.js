@@ -659,7 +659,7 @@ export const getMemberReward = async (req, res) => {
     const ses = "2025-26";
 
     const frmDate = new Date("2025-07-17T00:00:00");
-    const toDate = new Date("2026-07-17T23:59:59");
+    const toDate = new Date("2026-12-31T23:59:59");
 
     // Binary Pair Total
     const binResult = await pool

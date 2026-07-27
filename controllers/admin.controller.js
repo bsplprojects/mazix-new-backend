@@ -2400,7 +2400,7 @@ export const createPaymentTransfer = async (req, res) => {
 
       const obj = payout.recordset[0];
 
-      console.log(obj)
+      console.log(obj);
 
       const insertResult = await new sql.Request(transaction)
         .input("BinaryPayoutID", sql.Int, obj.BinaryPayoutID)
@@ -2615,32 +2615,56 @@ export const deleteWalletJoining = async (req, res) => {
     const { id } = req.params;
 
     const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
 
-    const checkResult = await pool.request().input("id", sql.BigInt, Number(id))
-      .query(`
-        SELECT *
-        FROM WalletTransfer
-        WHERE WalletTranferID = @id
-      `);
+    await transaction.begin();
+
+    const checkResult = await new sql.Request(transaction).input(
+      "id",
+      sql.BigInt,
+      Number(id),
+    ).query(`
+      SELECT WalletTranferID, TransactionId
+      FROM WalletTransfer
+      WHERE WalletTranferID = @id
+    `);
 
     if (checkResult.recordset.length === 0) {
+      await transaction.rollback();
+
       return res.status(404).json({
         success: false,
         message: "Wallet transfer not found",
       });
     }
 
-    await pool.request().input("id", sql.BigInt, Number(id)).query(`
-        UPDATE WalletTransfer
-        SET Status = 'Deactive', ModifyDate = GETDATE()
-        WHERE WalletTranferID = @id
-      `);
+    const { TransactionId } = checkResult.recordset[0];
+
+    await new sql.Request(transaction).input(
+      "TransactionId",
+      sql.NVarChar,
+      TransactionId,
+    ).query(`
+      UPDATE WalletTransfer
+      SET
+        Status = 'Deactive',
+        ModifyDate = GETDATE()
+      WHERE TransactionId = @TransactionId
+    `);
+
+    await transaction.commit();
 
     return res.status(200).json({
       success: true,
       message: "Wallet transfer deleted successfully",
     });
   } catch (err) {
+    if (transaction) {
+      try {
+        await transaction.rollback();
+      } catch (_) {}
+    }
+
     console.error("Wallet Transfer Delete Error:", err);
 
     return res.status(500).json({
