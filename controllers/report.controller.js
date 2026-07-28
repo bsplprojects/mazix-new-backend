@@ -196,48 +196,26 @@ export async function getRepurchaseReport(req, res) {
     let whereClause = "WHERE 1=1";
 
     if (MemberID) {
-      whereClause += " AND rwt.MemberID = @MemberID";
+      whereClause += " AND MemberID = @MemberID";
       request.input("MemberID", sql.VarChar, MemberID);
     }
 
     if (Fromdate) {
-      whereClause += " AND CAST(rwt.[Date] AS DATE) >= CAST(@Fromdate AS DATE)";
+      whereClause += " AND CAST(OrderDate AS DATE) >= CAST(@Fromdate AS DATE)";
       request.input("Fromdate", sql.DateTime, Fromdate);
     }
 
     if (Todate) {
-      whereClause += " AND CAST(rwt.[Date] AS DATE) <= CAST(@Todate AS DATE)";
+      whereClause += " AND CAST(OrderDate AS DATE) <= CAST(@Todate AS DATE)";
       request.input("Todate", sql.DateTime, Todate);
     }
 
     const result = await request.query(`
-    SELECT
-        rwt.MemberID,
-        rwt.PrevAmount,
-        rwt.Amount,
-        rwt.FromMemberID,
-        rwt.Flag,
-        rwt.ModifyDate,
-
-        mpi.MemberName AS Status,
-
-        CASE
-            WHEN rwt.FromMemberID = 'admin'
-            THEN 'ADMIN'
-            ELSE mpi2.MemberName
-        END AS WalletType
-
-    FROM RepurchaseWalletTransfer rwt
-
-    LEFT JOIN MemberPersonalInfo mpi
-        ON mpi.MemberID = rwt.MemberID
-
-    LEFT JOIN MemberPersonalInfo mpi2
-        ON mpi2.MemberID = rwt.FromMemberID
+      SELECT RepOrderId, MemberID, MID, OrderNo, OrderDate, TotalAmount, TotalGST, TotalBV, OrderStatus FROM RepProductOrder
 
     ${whereClause}
 
-    ORDER BY rwt.ModifyDate DESC
+    ORDER BY OrderDate DESC
   `);
 
     return res.status(200).json({
