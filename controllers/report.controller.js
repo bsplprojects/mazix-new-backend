@@ -191,42 +191,54 @@ export async function getRepurchaseReport(req, res) {
 
     const pool = await poolPromise;
 
-    const result = await pool
-      .request()
-      .input("MemberID", sql.VarChar, MemberID)
-      .input("Fromdate", sql.DateTime, Fromdate)
-      .input("Todate", sql.DateTime, Todate).query(`
-        SELECT
-            rwt.MemberID,
-            rwt.PrevAmount,
-            rwt.Amount,
-            rwt.FromMemberID,
-            rwt.Flag,
-            rwt.ModifyDate,
+    const request = pool.request();
 
-            mpi.MemberName AS Status,
+    let whereClause = "WHERE 1=1";
 
-            CASE
-                WHEN rwt.FromMemberID = 'admin'
-                THEN 'ADMIN'
-                ELSE mpi2.MemberName
-            END AS WalletType
+    if (MemberID) {
+      whereClause += " AND rwt.MemberID = @MemberID";
+      request.input("MemberID", sql.VarChar, MemberID);
+    }
 
-        FROM RepurchaseWalletTransfer rwt
+    if (Fromdate) {
+      whereClause += " AND CAST(rwt.[Date] AS DATE) >= CAST(@Fromdate AS DATE)";
+      request.input("Fromdate", sql.DateTime, Fromdate);
+    }
 
-        LEFT JOIN MemberPersonalInfo mpi
-            ON mpi.MemberID = rwt.MemberID
+    if (Todate) {
+      whereClause += " AND CAST(rwt.[Date] AS DATE) <= CAST(@Todate AS DATE)";
+      request.input("Todate", sql.DateTime, Todate);
+    }
 
-        LEFT JOIN MemberPersonalInfo mpi2
-            ON mpi2.MemberID = rwt.FromMemberID
+    const result = await request.query(`
+    SELECT
+        rwt.MemberID,
+        rwt.PrevAmount,
+        rwt.Amount,
+        rwt.FromMemberID,
+        rwt.Flag,
+        rwt.ModifyDate,
 
-        WHERE rwt.MemberID = @MemberID
-          AND CAST(rwt.[Date] AS DATE)
-              BETWEEN CAST(@Fromdate AS DATE)
-                  AND CAST(@Todate AS DATE)
+        mpi.MemberName AS Status,
 
-        ORDER BY rwt.ModifyDate DESC
-      `);
+        CASE
+            WHEN rwt.FromMemberID = 'admin'
+            THEN 'ADMIN'
+            ELSE mpi2.MemberName
+        END AS WalletType
+
+    FROM RepurchaseWalletTransfer rwt
+
+    LEFT JOIN MemberPersonalInfo mpi
+        ON mpi.MemberID = rwt.MemberID
+
+    LEFT JOIN MemberPersonalInfo mpi2
+        ON mpi2.MemberID = rwt.FromMemberID
+
+    ${whereClause}
+
+    ORDER BY rwt.ModifyDate DESC
+  `);
 
     return res.status(200).json({
       success: true,
@@ -273,7 +285,7 @@ export async function getRewardReport(req, res) {
     const {
       MemberId,
       Designation,
-      Fromdate,
+      FromDate,
       Todate,
       page = 1,
       pageSize = 10,
@@ -304,19 +316,19 @@ export async function getRewardReport(req, res) {
       dataRequest.input("Designation", sql.VarChar, Designation);
     }
 
-    if (Fromdate) {
-      whereClause += " AND mrs.ModifyDate >= @Fromdate";
+    if (FromDate) {
+      whereClause += " AND mrs.ModifyDate >= @FromDate";
 
-      const from = new Date(`${Fromdate} 00:00:00`);
+      const from = new Date(`${FromDate}T00:00:00`);
 
-      countRequest.input("Fromdate", sql.DateTime, from);
-      dataRequest.input("Fromdate", sql.DateTime, from);
+      countRequest.input("FromDate", sql.DateTime, from);
+      dataRequest.input("FromDate", sql.DateTime, from);
     }
 
     if (Todate) {
-      whereClause += " AND mrs.ModifyDate <= @Todate";
+      whereClause += " AND mrs.ModifyDate < DATEADD(DAY,1,@Todate)";
 
-      const to = new Date(`${Todate} 23:59:59`);
+      const to = new Date(`${Todate}T00:00:00`);
 
       countRequest.input("Todate", sql.DateTime, to);
       dataRequest.input("Todate", sql.DateTime, to);
