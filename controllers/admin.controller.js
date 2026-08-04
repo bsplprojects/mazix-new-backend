@@ -2811,3 +2811,137 @@ export const assignDelivery = async (req, res) => {
     });
   }
 };
+
+export const getOffers = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+
+    const result = await pool.request().query(`
+        SELECT *
+        FROM Offer
+        ORDER BY OfferID DESC
+    `);
+
+    return res.json({
+      success: true,
+      data: result.recordset,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      msg: error.message,
+    });
+  }
+};
+
+export const addOffer = async (req, res) => {
+  try {
+    const { title, description, link, startDate, endDate, status } = req.body;
+
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        msg: "Offer title is required.",
+      });
+    }
+
+    const image = req.file ? req.file.filename : null;
+    const imageURL = `../../Uploads/${image}`;
+
+    const pool = await poolPromise;
+
+    await pool
+      .request()
+      .input("Title", sql.NVarChar(255), title)
+      .input("Description", sql.NVarChar(sql.MAX), description || "")
+      .input("Link", sql.NVarChar(500), link || "")
+      .input("Image", sql.NVarChar(255), imageURL)
+      .input("StartDate", sql.Date, startDate || null)
+      .input("EndDate", sql.Date, endDate || null)
+      .input("Status", sql.Bit, status === "true" || status === true).query(`
+        INSERT INTO Offer
+        (
+            Title,
+            Description,
+            Link,
+            Image,
+            StartDate,
+            EndDate,
+            Status,
+            CreatedAt
+        )
+        VALUES
+        (
+            @Title,
+            @Description,
+            @Link,
+            @Image,
+            @StartDate,
+            @EndDate,
+            @Status,
+            GETDATE()
+        )
+      `);
+
+    return res.status(201).json({
+      success: true,
+      msg: "Offer created successfully.",
+    });
+  } catch (error) {
+    console.error("Add Offer Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+};
+
+export const updateOfferStatus = async (req, res) => {
+  try {
+    const { offerId, status } = req.body;
+
+    if (!offerId) {
+      return res.status(400).json({
+        success: false,
+        msg: "Offer ID is required.",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    const result = await pool
+      .request()
+      .input("OfferID", sql.BigInt, offerId)
+      .input("Status", sql.Bit, status).query(`
+        UPDATE Offer
+        SET
+            Status = @Status,
+            UpdatedAt = GETDATE()
+        WHERE OfferID = @OfferID;
+
+        SELECT @@ROWCOUNT AS RowsAffected;
+      `);
+
+    if (result.recordset[0].RowsAffected === 0) {
+      return res.status(404).json({
+        success: false,
+        msg: "Offer not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      msg: `Offer ${status ? "enabled" : "disabled"} successfully.`,
+    });
+  } catch (error) {
+    console.error("Update Offer Status:", error);
+
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
+    });
+  }
+};

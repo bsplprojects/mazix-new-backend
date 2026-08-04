@@ -15,12 +15,14 @@ import {
   updatePersonalInfo,
   updateNomineeInfo,
   updateBankInfo,
+  getActiveOffer,
 } from "../controllers/member.controller.js";
 import { upload } from "../lib/multer.js";
 
 const router = express.Router();
 
 router.route("/dashboard").get(getMemberDashboard);
+router.route("/offer").get(getActiveOffer);
 router.route("/reward/:MemberID").get(getMemberReward);
 router.route("/:mid").get(getMemberDetail);
 router.route("/invoice-joining/:id").get(getInvoiceAtJoining);

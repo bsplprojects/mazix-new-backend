@@ -1229,3 +1229,34 @@ export const updateBankInfo = async (req, res) => {
     });
   }
 };
+
+export const getActiveOffer = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+
+    const result = await pool.request().query(`
+       SELECT TOP 1 *
+        FROM Offer
+        WHERE Status = 1
+          AND (
+            StartDate IS NULL
+            OR StartDate <= CAST(GETDATE() AS DATE)
+          )
+          AND (
+            EndDate IS NULL
+            OR EndDate >= CAST(GETDATE() AS DATE)
+          )
+        ORDER BY OfferID DESC;
+    `);
+
+    return res.json({
+      success: true,
+      data: result.recordset[0],
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      msg: err.message,
+    });
+  }
+};

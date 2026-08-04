@@ -42,6 +42,9 @@ import {
   deleteWalletJoining,
   deleteWalletRepurchase,
   assignDelivery,
+  addOffer,
+  getOffers,
+  updateOfferStatus,
 } from "../controllers/admin.controller.js";
 import { isAdmin } from "../middleware/isAuth.js";
 import { upload } from "../lib/multer.js";
@@ -65,6 +68,7 @@ router.route("/sale/invoice").get(isAdmin, getInvoiceList);
 router.route("/invoice/stock").get(isAdmin, getInvoice);
 router.route("/member/otp").get(isAdmin, getOTP);
 router.route("/franchise").get(isAdmin, getFranchise);
+router.route("/offer").get(isAdmin, getOffers);
 
 router.route("/login").post(adminLogin);
 router.route("/events/new").post(isAdmin, addEvent);
@@ -84,6 +88,9 @@ router.route("/invoice/new").post(isAdmin, createInvoice);
 router.route("/reward/paid").post(isAdmin, createReward);
 router.route("/payment-transfer/paid").post(isAdmin, createPaymentTransfer);
 router.route("/order/delivery/:id").post(isAdmin, assignDelivery);
+router.route("/offer").post(isAdmin, upload.single("image"), addOffer);
+
+router.route("/offer/status").patch(isAdmin, updateOfferStatus);
 
 router.route("/product/:id").delete(isAdmin, deleteProduct);
 router.route("/category/:id").delete(isAdmin, deleteCategory);

@@ -89,12 +89,28 @@ export async function getRepurchaseWalletTransfer(req, res) {
 
     const pool = await poolPromise;
 
-    const result = await pool
-      .request()
-      .input("MemberID", sql.NVarChar(sql.MAX), MemberId || "")
-      .input("Fromdate", sql.NVarChar(sql.MAX), FromDate || "")
-      .input("Todate", sql.NVarChar(sql.MAX), Todate || "").query(`
-        SELECT * FROM RepurchaseWalletTransfer WHERE MemberID = @MemberID OR Date BETWEEN @Fromdate AND @Todate AND LOWER(Status) = 'active' ORDER BY Date DESC 
+    const request = pool.request();
+
+    let where = ["LOWER(Status) = 'active'"];
+
+    if (MemberId) {
+      request.input("MemberID", sql.NVarChar(sql.MAX), MemberId.toLowerCase());
+      where.push("LOWER(MemberID) = @MemberID");
+    }
+
+    if (FromDate && Todate) {
+      request.input("Fromdate", sql.Date, FromDate);
+      request.input("Todate", sql.Date, Todate);
+      where.push("[Date] BETWEEN @Fromdate AND @Todate");
+    }
+
+    const whereClause = where.join(" AND ");
+
+    const result = await request.query(`
+          SELECT *
+          FROM RepurchaseWalletTransfer
+          WHERE ${whereClause}
+          ORDER BY [Date] DESC
       `);
 
     const totalSend = await pool
@@ -1026,6 +1042,32 @@ export async function getStockReports(req, res) {
       success: false,
       msg: "Internal Server Error",
       error: error.message,
+    });
+  }
+}
+
+export async function generatePayoutReport(req, res) {
+  try {
+    const { FromDate, MemberId, Todate, page, pageSize } = req.query;
+
+    const pool = await poolPromise;
+
+    const result = await pool
+      .request()
+      .input("FromDate", sql.Date, FromDate)
+      .input("ToDate", sql.Date, Todate)
+      .input("ModifyDate", sql.Date, "2026-07-11");
+    // .execute("usp_GenerateMemberDownlineCount");
+
+    return res.status(200).json({
+      success: true,
+      msg: "OK",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error",
+      err: error.message,
     });
   }
 }
