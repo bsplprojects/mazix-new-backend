@@ -42,6 +42,6 @@ router
   .route("/repurchase-wallet-transfer")
   .get(isAdmin, getRepurchaseWalletTransfer);
 router.route("/stock").get(isAdmin, getStockReports);
-router.route("/payout").get(isAdmin, generatePayoutReport);
+router.route("/payout").post(isAdmin, generatePayoutReport);
 
 export default router;

@@ -1047,27 +1047,71 @@ export async function getStockReports(req, res) {
 }
 
 export async function generatePayoutReport(req, res) {
+  const { FromDate, MemberId, Todate } = req.body;
+
+  if (!FromDate || !Todate) {
+    return res.status(400).json({
+      success: false,
+      msg: "FromDate and Todate are required",
+    });
+  }
+
+  const memberIdParam = MemberId && MemberId.trim() !== "" ? MemberId : null;
+
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+
   try {
-    const { FromDate, MemberId, Todate, page, pageSize } = req.query;
+    await transaction.begin();
 
-    const pool = await poolPromise;
-
-    const result = await pool
-      .request()
+    const downlineRequest = new sql.Request(transaction);
+    const downlineResult = await downlineRequest
       .input("FromDate", sql.Date, FromDate)
       .input("ToDate", sql.Date, Todate)
-      .input("ModifyDate", sql.Date, "2026-07-11");
-    // .execute("usp_GenerateMemberDownlineCount");
+      .input("MemberID", sql.NVarChar, memberIdParam)
+      .execute("usp_GenerateMemberDownlineCount");
+
+    const repurchaseRequest = new sql.Request(transaction);
+    const repurchaseResult = await repurchaseRequest
+      .input("FromDate", sql.Date, FromDate)
+      .input("ToDate", sql.Date, Todate)
+      .input("MemberID", sql.NVarChar, memberIdParam)
+      .execute("usp_GenerateRepurchaseDownlineCount");
+
+    const payoutRequest = new sql.Request(transaction);
+    const payoutResult = await payoutRequest
+      .input("memberID", sql.NVarChar, memberIdParam)
+      .input("fdate", sql.Date, FromDate)
+      .input("tdate", sql.Date, Todate)
+      .execute("Member_BinaryPayout_V2");
+
+    await transaction.commit();
 
     return res.status(200).json({
       success: true,
       msg: "OK",
+      data: {
+        downlineRowsAffected: downlineResult.rowsAffected,
+        repurchaseRowsAffected: repurchaseResult.rowsAffected,
+        payoutRowsAffected: payoutResult.rowsAffected,
+      },
     });
-  } catch (error) {
+  } catch (err) {
+    console.error("generate-payout failed:", err);
+
+    try {
+      await transaction.rollback();
+    } catch (rollbackErr) {
+      console.error("Rollback also failed:", rollbackErr);
+    }
+
+    const detail =
+      err.originalError?.info?.message || err.message || "Unknown error";
+
     return res.status(500).json({
       success: false,
-      msg: "Internal Server Error",
-      err: error.message,
+      msg: "Payout generation failed",
+      error: detail,
     });
   }
 }
